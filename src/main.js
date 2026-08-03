@@ -799,6 +799,16 @@ function buildTrayMenu() {
       click: () => goBackToWelcome()
     },
     { type: 'separator' },
+    {
+      label: 'Redemarrer l\'app',
+      click: () => {
+        app.isQuiting = true;
+        // Relance sans --hidden pour que la fenetre principale reapparaisse
+        const args = process.argv.slice(1).filter((a) => a !== '--hidden');
+        app.relaunch({ args });
+        app.quit();
+      }
+    },
     { label: 'Quitter', click: () => { app.isQuiting = true; app.quit(); } }
   );
   return Menu.buildFromTemplate(items);
@@ -1165,17 +1175,21 @@ if (!gotLock) {
     ensureAutoLaunch();
 
     const mode = store.get('mode');
+    const isBootHidden = process.argv.includes('--hidden');
     if (!mode) {
       createWelcomeWindow();
     } else {
-      if (!process.argv.includes('--hidden')) {
+      if (!isBootHidden) {
         if (mode === 'admin') createAdminWindow();
         else if (mode === 'user') createUserWindow();
       }
-      connectAllWs();
+      // Au boot Windows (--hidden), on laisse ~5s au reseau pour se preparer
+      // avant de tenter la connexion WS. Sinon on connecte tout de suite.
+      const wsDelayMs = isBootHidden ? 5000 : 0;
+      setTimeout(connectAllWs, wsDelayMs);
     }
-    // Check pour les mises a jour au demarrage et toutes les heures
-    setTimeout(checkForUpdate, 3000); // delai pour pas saturer le boot
+    // Check pour les mises a jour au demarrage et toutes les 15 min
+    setTimeout(checkForUpdate, 3000);
     setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
   });
 
