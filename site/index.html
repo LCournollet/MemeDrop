@@ -32,6 +32,17 @@
     main { width: 100%; max-width: 560px; text-align: center; }
     .logo { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 10px 40px rgba(88, 101, 242, .35); }
     h1 { font-size: 2.6rem; margin-top: 20px; letter-spacing: -.02em; }
+    .version {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 4px 12px;
+      background: rgba(88, 101, 242, .15);
+      border: 1px solid rgba(88, 101, 242, .4);
+      border-radius: 999px;
+      color: #aab2ff;
+      font-size: .9rem;
+      font-weight: 600;
+    }
     .tagline { color: var(--muted); font-size: 1.1rem; margin-top: 6px; }
     .download {
       display: inline-flex;
@@ -69,11 +80,12 @@
   <main>
     <img class="logo" src="icon.png" alt="MemeDrop">
     <h1>MemeDrop</h1>
+    <span id="version" class="version">Version …</span>
     <p class="tagline">Les memes de ton Discord, en overlay sur l'écran de tes potes.</p>
 
     <a id="dl" class="download" href="download/MemeDrop-Setup-latest.exe">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 19h16"/></svg>
-      <span>Télécharger pour Windows</span>
+      <span id="dl-label">Télécharger pour Windows</span>
     </a>
     <p id="meta" class="meta"></p>
 
@@ -94,11 +106,15 @@
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((info) => {
         document.getElementById('dl').href = 'download/' + encodeURIComponent(info.file);
+        document.getElementById('version').textContent = 'v' + info.version;
+        document.getElementById('dl-label').textContent = 'Télécharger v' + info.version;
         const mb = (info.size / 1024 / 1024).toFixed(0);
         const date = new Date(info.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-        document.getElementById('meta').textContent = 'Version ' + info.version + ' · ' + mb + ' Mo · ' + date;
+        document.getElementById('meta').textContent = 'Windows · ' + mb + ' Mo · publiée le ' + date;
       })
-      .catch(() => {});
+      .catch(() => {
+        document.getElementById('version').textContent = 'Aucune version publiée';
+      });
   </script>
 </body>
 </html>
