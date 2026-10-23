@@ -17,8 +17,8 @@ const DEFAULT_SERVER_URL = 'ws://57.131.40.94:8787';
 // Change-le avant de distribuer le .exe a tes amis.
 const APP_ADMIN_PASSWORD = 'TonMdpAdmin';
 
-// Repo GitHub (owner/repo) public qui heberge les .exe releases pour l'auto-update.
-const UPDATE_REPO = 'LCournollet/memedrop-releases';
+// Manifest de la derniere version, publie sur le VPS par la GitHub Action release.yml.
+const UPDATE_MANIFEST_URL = 'https://memedrop.57-131-40-94.sslip.io/latest.json';
 const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 min
 // =============================================================================
 
@@ -75,12 +75,13 @@ function compareSemver(a, b) {
 
 async function checkForUpdate() {
   try {
-    const res = await fetch('https://api.github.com/repos/' + UPDATE_REPO + '/releases/latest', {
-      headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'MemeDrop-Updater' }
+    const res = await fetch(UPDATE_MANIFEST_URL, {
+      headers: { 'User-Agent': 'MemeDrop-Updater' },
+      cache: 'no-store'
     });
     if (!res.ok) return;
     const data = await res.json();
-    const latest = (data.tag_name || '').replace(/^v/i, '').trim();
+    const latest = String(data.version || '').replace(/^v/i, '').trim();
     const current = app.getVersion();
     if (!latest) return;
     if (compareSemver(latest, current) <= 0) {
@@ -91,15 +92,14 @@ async function checkForUpdate() {
       }
       return;
     }
-    const exeAsset = (data.assets || []).find((a) => /\.exe$/i.test(a.name));
-    if (!exeAsset) return;
+    if (!data.url) return;
     updateInfo = {
       version: latest,
       name: data.name || ('MemeDrop v' + latest),
-      downloadUrl: exeAsset.browser_download_url
+      downloadUrl: data.url
     };
     notifyAllUpdate();
-  } catch (_) { /* offline ou GitHub down */ }
+  } catch (_) { /* offline ou VPS down */ }
 }
 
 function notifyAllUpdate() {
@@ -343,7 +343,7 @@ function handleWsMessage(msg) {
     notifyAdminStatus();
   }
   if (msg.type === 'update-available') {
-    // Le serveur a detecte une nouvelle release sur GitHub -> on re-check immediat
+    // Le serveur a detecte une nouvelle release (latest.json) -> on re-check immediat
     checkForUpdate();
   }
   if (msg.type === 'meme') {

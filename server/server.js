@@ -10,7 +10,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456';
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
 const LIBRARY_PATH = process.env.LIBRARY_PATH || path.join(__dirname, 'library.json');
 const LIBRARY_MAX_ENTRIES = 5000;
-const UPDATE_REPO = process.env.UPDATE_REPO || 'LCournollet/memedrop-releases';
+const UPDATE_MANIFEST_URL = process.env.UPDATE_MANIFEST_URL || 'https://memedrop.57-131-40-94.sslip.io/latest.json';
 const UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 
 const MEDIA_RE = {
@@ -978,16 +978,17 @@ server.on('upgrade', (req, socket, head) => {
   });
 });
 
-// Poll GitHub releases pour detecter une nouvelle version et la pusher aux clients
+// Poll le manifest latest.json (site de telechargement) pour detecter une nouvelle version et la pusher aux clients
 let lastKnownReleaseTag = null;
-async function pollGitHubRelease() {
+async function pollLatestRelease() {
   try {
-    const res = await fetch('https://api.github.com/repos/' + UPDATE_REPO + '/releases/latest', {
-      headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'MemeDrop-Server' }
+    const res = await fetch(UPDATE_MANIFEST_URL, {
+      headers: { 'User-Agent': 'MemeDrop-Server' },
+      cache: 'no-store'
     });
     if (!res.ok) return;
     const data = await res.json();
-    const tag = (data.tag_name || '').trim();
+    const tag = data.version ? 'v' + String(data.version).replace(/^v/i, '').trim() : '';
     if (!tag) return;
     if (lastKnownReleaseTag === null) {
       lastKnownReleaseTag = tag;
@@ -1008,8 +1009,8 @@ server.listen(PORT, () => {
   console.log(`[memedrop-server] listening on :${PORT}`);
   startDiscord();
   // Premier check au demarrage, puis toutes les 5 min
-  pollGitHubRelease();
-  setInterval(pollGitHubRelease, UPDATE_POLL_INTERVAL_MS);
+  pollLatestRelease();
+  setInterval(pollLatestRelease, UPDATE_POLL_INTERVAL_MS);
 });
 
 process.on('SIGTERM', () => { stopDiscord(); server.close(() => process.exit(0)); });

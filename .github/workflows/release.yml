@@ -1,0 +1,94 @@
+name: Release app
+
+# Declenche par un tag vX.Y.Z (doit correspondre a la version de package.json) :
+#   git tag v0.6.6 && git push origin v0.6.6
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME != version package.json ($VERSION)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+
+      - name: Build installer
+        run: npx electron-builder --win --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: dist/MemeDrop-Setup-*.exe
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer
+          path: release
+
+      - name: Upload site + installer to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: 'site,deploy,release'
+          target: 'memedrop-site-upload'
+          rm: true
+
+      - name: Publish on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: VERSION
+          script: |
+            set -e
+            UP=~/memedrop-site-upload
+            bash $UP/deploy/setup-site.sh $UP
+            cp $UP/release/MemeDrop-Setup-$VERSION.exe /var/www/memedrop/download/
+            bash $UP/deploy/publish-release.sh "$VERSION" "MemeDrop-Setup-$VERSION.exe"
+
+      # Optionnel : continue de publier sur le repo GitHub de releases pour les
+      # clients <= 0.6.5 qui cherchent encore les MAJ la-bas. Ajoute le secret
+      # RELEASES_TOKEN (PAT avec acces a LCournollet/memedrop-releases) pour l'activer.
+      - name: Mirror to GitHub releases (legacy clients)
+        if: env.RELEASES_TOKEN != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: LCournollet/memedrop-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: v${{ env.VERSION }}
+          name: MemeDrop v${{ env.VERSION }}
+          files: release/MemeDrop-Setup-${{ env.VERSION }}.exe

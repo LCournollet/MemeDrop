@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MemeDrop — Télécharger</title>
+  <meta name="description" content="Drop des memes Discord en overlay sur les écrans de tes amis.">
+  <link rel="icon" href="icon.png">
+  <style>
+    :root {
+      --bg: #0f1016;
+      --card: #181a24;
+      --border: #262938;
+      --text: #e8e9f0;
+      --muted: #9095a8;
+      --accent: #5865f2;
+      --accent-hover: #6b77ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 20px;
+      background: radial-gradient(ellipse at top, #1d2040 0%, var(--bg) 60%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+    main { width: 100%; max-width: 560px; text-align: center; }
+    .logo { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 10px 40px rgba(88, 101, 242, .35); }
+    h1 { font-size: 2.6rem; margin-top: 20px; letter-spacing: -.02em; }
+    .tagline { color: var(--muted); font-size: 1.1rem; margin-top: 6px; }
+    .download {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 32px;
+      padding: 16px 30px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 12px;
+      transition: background .15s, transform .15s;
+    }
+    .download:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .download svg { width: 22px; height: 22px; }
+    .meta { color: var(--muted); font-size: .9rem; margin-top: 12px; min-height: 1.4em; }
+    .card {
+      margin-top: 40px;
+      padding: 22px 26px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      text-align: left;
+    }
+    .card h2 { font-size: 1rem; margin-bottom: 10px; }
+    .card ol { padding-left: 20px; color: var(--muted); }
+    .card li + li { margin-top: 6px; }
+    .card strong { color: var(--text); }
+    footer { margin-top: 40px; color: var(--muted); font-size: .8rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="logo" src="icon.png" alt="MemeDrop">
+    <h1>MemeDrop</h1>
+    <p class="tagline">Les memes de ton Discord, en overlay sur l'écran de tes potes.</p>
+
+    <a id="dl" class="download" href="download/MemeDrop-Setup-latest.exe">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 19h16"/></svg>
+      <span>Télécharger pour Windows</span>
+    </a>
+    <p id="meta" class="meta"></p>
+
+    <section class="card">
+      <h2>Installation</h2>
+      <ol>
+        <li>Lance <strong>MemeDrop-Setup.exe</strong>.</li>
+        <li>Si Windows affiche « Windows a protégé votre ordinateur » : <strong>Informations complémentaires</strong> puis <strong>Exécuter quand même</strong> (l'app n'est pas signée).</li>
+        <li>Entre le code de salon qu'on t'a donné. L'app tourne ensuite dans la barre des tâches et se met à jour toute seule.</li>
+      </ol>
+    </section>
+
+    <footer>Windows 10 / 11 · 64 bits</footer>
+  </main>
+
+  <script>
+    fetch('latest.json', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((info) => {
+        document.getElementById('dl').href = 'download/' + encodeURIComponent(info.file);
+        const mb = (info.size / 1024 / 1024).toFixed(0);
+        const date = new Date(info.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+        document.getElementById('meta').textContent = 'Version ' + info.version + ' · ' + mb + ' Mo · ' + date;
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>
