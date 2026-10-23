@@ -541,6 +541,8 @@
         iframe.src = 'https://www.youtube.com/embed/' + ytId + '?' + params.toString();
         iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
         iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        // Pas de survol -> YouTube n'affiche pas son interface (pause, titre...)
+        iframe.style.pointerEvents = 'none';
         let durationKnown = false;
         let ended = false;
         ytMessageHandler = (ev) => {
