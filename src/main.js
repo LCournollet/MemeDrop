@@ -263,6 +263,20 @@ function createOverlayWindow() {
     }
   );
 
+  // L'overlay est en file:// donc l'iframe YouTube part sans Referer, ce que
+  // YouTube refuse ("Erreur 153"). On injecte un Referer https valide
+  // (pas youtube.com lui-meme, sinon "Erreur 152").
+  overlayWindow.webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*.youtube.com/*', '*://*.youtube-nocookie.com/*'] },
+    (details, callback) => {
+      const requestHeaders = { ...details.requestHeaders };
+      if (!requestHeaders.Referer && !requestHeaders.referer) {
+        requestHeaders.Referer = 'https://memedrop.app/';
+      }
+      callback({ requestHeaders });
+    }
+  );
+
   overlayWindow.loadFile(path.join(__dirname, 'overlay.html'));
 }
 

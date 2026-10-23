@@ -298,6 +298,11 @@
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  function youtubeThumb(url) {
+    const m = String(url || '').match(/(?:shorts\/|[?&]v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    return m ? 'https://i.ytimg.com/vi/' + m[1] + '/hqdefault.jpg' : null;
+  }
+
   function renderCard(e) {
     const card = document.createElement('div');
     card.className = 'card';
@@ -309,6 +314,8 @@
     } else if (kind === 'video') {
       // poster = premiere frame via attribute (Chrome supporte muted+preload metadata)
       thumbHtml = `<video src="${escapeHtml(e.mediaUrl)}" preload="metadata" muted playsinline></video>`;
+    } else if (kind === 'youtube' && youtubeThumb(e.mediaUrl)) {
+      thumbHtml = `<img src="${escapeHtml(youtubeThumb(e.mediaUrl))}" alt="" loading="lazy" />`;
     } else if (kind === 'audio') {
       thumbHtml = `<div class="icon">🎵</div>`;
     } else {
@@ -414,6 +421,10 @@
       v.controls = true;
       v.muted = true;
       preview.appendChild(v);
+    } else if (kind === 'youtube' && youtubeThumb(e.mediaUrl)) {
+      const img = document.createElement('img');
+      img.src = youtubeThumb(e.mediaUrl);
+      preview.appendChild(img);
     } else if (kind === 'audio') {
       const a = document.createElement('audio');
       a.src = e.mediaUrl;

@@ -129,6 +129,13 @@
     box-shadow: 0 12px 28px rgba(0,0,0,0.55);
     background: #000;
   }
+  /* Video YouTube classique (16:9) : on remplit la largeur */
+  .tt-wrap.wide {
+    height: auto;
+    width: 100%;
+    max-height: 100%;
+    aspect-ratio: 16 / 9;
+  }
   .tt-wrap iframe {
     position: absolute;
     inset: 0;
@@ -222,6 +229,7 @@
   let currentMediaEl = null;
   let currentMediaKind = null; // 'image' | 'video' | 'audio' | 'image-audio'
   let currentAudioEl = null;   // utilise pour 'image-audio' (audio separe de l'image)
+  let ytMessageHandler = null; // listener postMessage du player YouTube en cours
   let currentVolume = 80;
   let currentMuted = false;
 
@@ -235,8 +243,23 @@
       } else if (currentMediaKind === 'image-audio' && currentAudioEl) {
         currentAudioEl.volume = volume / 100;
         currentAudioEl.muted = muted;
+      } else if (currentMediaKind === 'youtube' && currentMediaEl) {
+        ytCommand(currentMediaEl, 'setVolume', [volume]);
+        ytCommand(currentMediaEl, muted ? 'mute' : 'unMute');
       }
     } catch (_) {}
+  }
+
+  // Envoie une commande a l'iframe YouTube (API postMessage, enablejsapi=1)
+  function ytCommand(iframe, func, args) {
+    try {
+      iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: args || [], id: 1, channel: 'widget' }), '*');
+    } catch (_) {}
+  }
+
+  function extractYouTubeId(url) {
+    const m = String(url || '').match(/(?:shorts\/|[?&]v=|youtu\.be\/|embed\/|live\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
   }
 
   function pauseCurrentMedia() {
@@ -249,6 +272,7 @@
   function clearStage() {
     pauseCurrentMedia();
     if (gifLoopTimer) { clearInterval(gifLoopTimer); gifLoopTimer = null; }
+    if (ytMessageHandler) { window.removeEventListener('message', ytMessageHandler); ytMessageHandler = null; }
     currentMediaEl = null;
     currentAudioEl = null;
     currentMediaKind = null;
@@ -494,6 +518,70 @@
         if (!stage.classList.contains('show')) { showStage(); scheduleHide(capMs(cfgMs)); }
       }, 4000);
       return;
+    }
+
+    if (mediaKind === 'youtube') {
+      const ytId = extractYouTubeId(mediaUrl);
+      if (ytId) {
+        currentMediaKind = 'youtube';
+        const wrap = document.createElement('div');
+        wrap.className = 'tt-wrap' + (/\/shorts\//i.test(mediaUrl) ? '' : ' wide');
+        const iframe = document.createElement('iframe');
+        const params = new URLSearchParams({
+          autoplay: '1',
+          controls: '0',
+          playsinline: '1',
+          rel: '0',
+          iv_load_policy: '3',
+          disablekb: '1',
+          enablejsapi: '1',
+          mute: currentMuted ? '1' : '0'
+        });
+        if (startSec > 0) params.set('start', String(Math.floor(startSec)));
+        iframe.src = 'https://www.youtube.com/embed/' + ytId + '?' + params.toString();
+        iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+        iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        let durationKnown = false;
+        let ended = false;
+        ytMessageHandler = (ev) => {
+          if (ev.source !== iframe.contentWindow) return;
+          let data;
+          try { data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data; } catch (_) { return; }
+          if (!data || !data.event) return;
+          if (data.event === 'onReady') {
+            ytCommand(iframe, 'setVolume', [currentVolume]);
+            if (currentMuted) ytCommand(iframe, 'mute');
+            ytCommand(iframe, 'playVideo');
+          }
+          const info = data.info || {};
+          // Duree connue -> on cale la duree d'affichage sur la video
+          if (!durationKnown && typeof info.duration === 'number' && info.duration > 0) {
+            durationKnown = true;
+            if (!force) scheduleHide(pickDuration(info.duration * 1000));
+          }
+          // playerState 0 = fin de la video -> on ferme (sauf duree forcee)
+          if (!ended && !force && (info.playerState === 0 || (data.event === 'onStateChange' && data.info === 0))) {
+            ended = true;
+            scheduleHide(300);
+          }
+        };
+        window.addEventListener('message', ytMessageHandler);
+        iframe.onload = () => {
+          // Abonnement aux evenements du player (equivalent IFrame API sans script externe)
+          try {
+            iframe.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
+          } catch (_) {}
+          showStage();
+          if (!durationKnown || force) scheduleHide(capMs(cfgMs));
+        };
+        wrap.appendChild(iframe);
+        mediaInner.appendChild(wrap);
+        currentMediaEl = iframe;
+        setTimeout(() => {
+          if (!stage.classList.contains('show')) { showStage(); scheduleHide(capMs(cfgMs)); }
+        }, 4000);
+        return;
+      }
     }
 
     // Fallback : type inconnu, juste texte

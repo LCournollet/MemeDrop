@@ -272,6 +272,16 @@ async function resolveTikTokDirectMp4(originalUrl, attempts = 3) {
 
 const INSTAGRAM_RE = /instagram\.com\/(reel|reels|p)\/([A-Za-z0-9_-]+)/i;
 const TWITTER_RE = /(?:twitter\.com|x\.com)\/([^/\s?#]+)\/status\/(\d+)/i;
+// YouTube : shorts, watch, youtu.be, embed, live. Les URLs googlevideo sont
+// liees a l'IP du serveur -> on ne resout pas en MP4, l'overlay utilise l'embed.
+const YOUTUBE_RE = /(?:youtube\.com\/(?:shorts\/|watch\?(?:[^#\s]*&)?v=|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i;
+
+// Renvoie { id, vertical } ou null. vertical = Short (format 9:16)
+function parseYouTubeUrl(url) {
+  const m = String(url).match(YOUTUBE_RE);
+  if (!m) return null;
+  return { id: m[1], vertical: /\/shorts\//i.test(url) };
+}
 
 const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
@@ -562,6 +572,16 @@ async function handleIncomingMessage(message) {
         broadcastToRoom(room.code, meme({ mediaUrl: ig.url, mediaKind: ig.kind, text: cleanTextFromUrl(text, u) }));
         return;
       }
+    }
+
+    // YouTube (Shorts inclus) : lu via l'embed YouTube dans l'overlay
+    const yt = parseYouTubeUrl(u);
+    if (yt) {
+      const ytUrl = yt.vertical
+        ? 'https://www.youtube.com/shorts/' + yt.id
+        : 'https://www.youtube.com/watch?v=' + yt.id;
+      broadcastToRoom(room.code, meme({ mediaUrl: ytUrl, mediaKind: 'youtube', text: cleanTextFromUrl(text, u) }));
+      return;
     }
 
     // Twitter/X : resolution video via vxtwitter API (rapide) ou yt-dlp en fallback
