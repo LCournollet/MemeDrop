@@ -18,6 +18,7 @@ if (isSubFrame && /(^|\.)youtube(-nocookie)?\.com$/.test(location.hostname)) {
 if (!isSubFrame) contextBridge.exposeInMainWorld('memedrop', {
   // Overlay
   onMeme: (cb) => ipcRenderer.on('meme:show', (_e, data) => cb(data)),
+  onStop: (cb) => ipcRenderer.on('meme:stop', (_e, data) => cb(data || {})),
   onAudioChange: (cb) => ipcRenderer.on('overlay:audio', (_e, data) => cb(data)),
 
   // Welcome screen

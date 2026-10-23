@@ -230,6 +230,8 @@
   let currentMediaKind = null; // 'image' | 'video' | 'audio' | 'image-audio'
   let currentAudioEl = null;   // utilise pour 'image-audio' (audio separe de l'image)
   let ytMessageHandler = null; // listener postMessage du player YouTube en cours
+  let renderTimers = [];       // timers "safety net" du meme en cours (annules au clear)
+  let currentRoomCode = null;  // salon d'origine du meme en cours (pour "!!STOP")
   let currentVolume = 80;
   let currentMuted = false;
 
@@ -269,13 +271,25 @@
     } catch (_) {}
   }
 
+  function renderLater(fn, ms) {
+    renderTimers.push(setTimeout(fn, ms));
+  }
+
   function clearStage() {
     pauseCurrentMedia();
+    renderTimers.forEach(clearTimeout);
+    renderTimers = [];
+    // Detache les handlers du meme en cours : un media coupe (ex. "!!STOP" avant
+    // la fin du chargement) ne doit pas reprogrammer le hide du meme suivant
+    [...mediaInner.querySelectorAll('img, video, audio, iframe'), currentMediaEl, currentAudioEl].forEach((el) => {
+      if (el) el.onload = el.onerror = el.onloadedmetadata = null;
+    });
     if (gifLoopTimer) { clearInterval(gifLoopTimer); gifLoopTimer = null; }
     if (ytMessageHandler) { window.removeEventListener('message', ytMessageHandler); ytMessageHandler = null; }
     currentMediaEl = null;
     currentAudioEl = null;
     currentMediaKind = null;
+    currentRoomCode = null;
     mediaInner.innerHTML = '';
     textEl.textContent = '';
     authorEl.classList.add('hidden');
@@ -341,6 +355,7 @@
 
   function render({ mediaUrl, mediaKind, audioUrl, text, author, source, duration, forceDuration, startTime, volume, muted }) {
     clearStage();
+    currentRoomCode = (source && source.roomCode) || null;
     textEl.textContent = text || '';
     renderAuthor(author, source);
 
@@ -491,7 +506,7 @@
         currentAudioEl = a;
       }
       // Safety net : si rien ne charge en 5s
-      setTimeout(() => { if (!started) { imgReady = true; audioReady = true; tryStart(); } }, 5000);
+      renderLater(() => { if (!started) { imgReady = true; audioReady = true; tryStart(); } }, 5000);
       return;
     }
 
@@ -514,7 +529,7 @@
       mediaInner.appendChild(wrap);
       currentMediaEl = iframe;
       // Safety net : si l'iframe ne fire jamais onload (rare), debloque la queue
-      setTimeout(() => {
+      renderLater(() => {
         if (!stage.classList.contains('show')) { showStage(); scheduleHide(capMs(cfgMs)); }
       }, 4000);
       return;
@@ -579,7 +594,7 @@
         wrap.appendChild(iframe);
         mediaInner.appendChild(wrap);
         currentMediaEl = iframe;
-        setTimeout(() => {
+        renderLater(() => {
           if (!stage.classList.contains('show')) { showStage(); scheduleHide(capMs(cfgMs)); }
         }, 4000);
         return;
@@ -604,6 +619,14 @@
     currentVolume = Math.max(0, Math.min(100, Number(volume) || 0));
     currentMuted = !!muted;
     applyVolumeToMedia(currentVolume, currentMuted);
+  });
+
+  // "!!STOP" : coupe tout de suite le meme en cours (fondu court) s'il vient du
+  // meme salon que la commande ; la file continue avec le suivant
+  window.memedrop.onStop(({ roomCode }) => {
+    if (!playing || stage.classList.contains('hide')) return;
+    if (!roomCode || roomCode !== currentRoomCode) return;
+    scheduleHide(0);
   });
 
   window.memedrop.onMeme((data) => {

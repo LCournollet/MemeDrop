@@ -492,6 +492,11 @@ async function handleIncomingMessage(message) {
   if (!room) return; // ce channel n'est pas mappe a une room
 
   const rawText = (message.content || '').trim();
+  // "!!STOP" (exactement, en majuscules) : coupe le meme en cours s'il vient de ce salon
+  if (rawText === '!!STOP') {
+    broadcastToRoom(room.code, { type: 'stop', roomCode: room.code });
+    return;
+  }
   // Parse les commandes en fin de texte : ":Ns" pour duree, "/N" pour timestamp de depart.
   // Les deux peuvent etre combines dans n'importe quel ordre.
   let textAfterCmds = rawText;

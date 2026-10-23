@@ -363,6 +363,10 @@ function handleWsMessage(msg) {
     // Le serveur a detecte une nouvelle release (latest.json) -> on re-check immediat
     checkForUpdate();
   }
+  if (msg.type === 'stop') {
+    // "!!STOP" sur Discord : coupe le meme en cours s'il vient de ce salon, passe au suivant
+    if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.webContents.send('meme:stop', { roomCode: msg.roomCode || null });
+  }
   if (msg.type === 'meme') {
     showMeme({
       mediaUrl: msg.mediaUrl,
