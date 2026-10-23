@@ -1,17 +1,53 @@
 name: Release app
 
-# Declenche par un tag vX.Y.Z (doit correspondre a la version de package.json) :
-#   git tag v0.6.6 && git push origin v0.6.6
+# Publie automatiquement quand la version de package.json change sur main :
+#   bump "version" dans package.json -> commit -> git push
+# (un tag vX.Y.Z ou un lancement manuel marchent aussi.)
+# Si la version est deja celle de latest.json sur le VPS, rien n'est publie.
 on:
   push:
+    branches: [main]
+    paths: ['package.json']
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+env:
+  SITE_URL: https://memedrop.57-131-40-94.sslip.io
+
 jobs:
-  build:
-    runs-on: windows-latest
+  check:
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare version with published one
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME != version package.json ($VERSION)"
+            exit 1
+          fi
+          PUBLISHED=$(curl -fsS "$SITE_URL/latest.json" | node -p "JSON.parse(require('fs').readFileSync(0)).version" 2>/dev/null || echo none)
+          echo "package.json=$VERSION publie=$PUBLISHED"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == "$PUBLISHED" ]]; then
+            echo "Version $VERSION deja publiee, rien a faire."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.publish == 'true'
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -19,17 +55,6 @@ jobs:
         with:
           node-version: 20
           cache: npm
-
-      - name: Read version
-        id: version
-        shell: bash
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
-            echo "::error::Tag $GITHUB_REF_NAME != version package.json ($VERSION)"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - run: npm ci
 
@@ -43,10 +68,10 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: build
+    needs: [check, build]
     runs-on: ubuntu-latest
     env:
-      VERSION: ${{ needs.build.outputs.version }}
+      VERSION: ${{ needs.check.outputs.version }}
       RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -92,3 +117,13 @@ jobs:
           tag_name: v${{ env.VERSION }}
           name: MemeDrop v${{ env.VERSION }}
           files: release/MemeDrop-Setup-${{ env.VERSION }}.exe
+
+      - name: Tag the release commit
+        if: github.ref_type != 'tag'
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "Tag v$VERSION existe deja"
+          else
+            git tag "v$VERSION" "$GITHUB_SHA"
+            git push origin "v$VERSION"
+          fi
