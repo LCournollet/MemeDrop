@@ -1,6 +1,21 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
-contextBridge.exposeInMainWorld('memedrop', {
+// L'overlay execute aussi ce preload dans ses iframes (nodeIntegrationInSubFrames).
+// Dans l'embed YouTube : on cache toute l'interface du lecteur (titre, pause,
+// "Plus de videos", logo) avant le premier affichage. insertCSS passe outre la CSP.
+// Les iframes n'ont jamais acces a l'API memedrop.
+const isSubFrame = window.self !== window.top;
+if (isSubFrame && /(^|\.)youtube(-nocookie)?\.com$/.test(location.hostname)) {
+  webFrame.insertCSS(
+    // Nouvelle UI (#player-controls, hors du player) + ancienne UI (.ytp-*)
+    '#player-controls, #player-control-overlay, #bottom-sheet-wrapper,'
+    + ' .html5-video-player > :not(.html5-video-container)'
+    + ' { display: none !important; }'
+    + ' .html5-video-player { cursor: none !important; }'
+  );
+}
+
+if (!isSubFrame) contextBridge.exposeInMainWorld('memedrop', {
   // Overlay
   onMeme: (cb) => ipcRenderer.on('meme:show', (_e, data) => cb(data)),
   onAudioChange: (cb) => ipcRenderer.on('overlay:audio', (_e, data) => cb(data)),

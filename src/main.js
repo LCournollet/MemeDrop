@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, shell, dialog, webFrameMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
@@ -219,6 +219,9 @@ function createOverlayWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Lance le preload dans l'iframe YouTube pour masquer l'UI du lecteur
+      // (voir preload.js ; les iframes n'ont pas acces a l'API memedrop)
+      nodeIntegrationInSubFrames: true,
       // Necessaire pour permettre l'embed YouTube/TikTok dans l'overlay
       // (l'overlay ne charge que des medias publics, pas de risque)
       webSecurity: false,
@@ -276,28 +279,6 @@ function createOverlayWindow() {
       callback({ requestHeaders });
     }
   );
-
-  // Masque l'interface du lecteur YouTube (titre, pause, "Plus de videos", logo...)
-  // meme avec controls=0. On injecte la feuille de style dans l'iframe embed :
-  // tout est cache sauf le conteneur video.
-  overlayWindow.webContents.on('did-frame-finish-load', (_e, isMainFrame, processId, routingId) => {
-    if (isMainFrame) return;
-    const frame = webFrameMain.fromId(processId, routingId);
-    if (!frame || !/^https:\/\/www\.youtube(-nocookie)?\.com\/embed\//.test(frame.url)) return;
-    frame.executeJavaScript(`(() => {
-      const css = '.html5-video-player > :not(.html5-video-container) { display: none !important; }'
-        + ' .html5-video-player { cursor: none !important; }';
-      try {
-        const sheet = new CSSStyleSheet();
-        sheet.replaceSync(css);
-        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-      } catch (_) {
-        const style = document.createElement('style');
-        style.textContent = css;
-        document.documentElement.appendChild(style);
-      }
-    })()`).catch(() => {});
-  });
 
   overlayWindow.loadFile(path.join(__dirname, 'overlay.html'));
 }
