@@ -31,6 +31,7 @@ const store = new Store({
     userCodes: [],     // multi-salon : liste des codes (priorite sur userCode legacy)
     overlayDurationMs: 8000,
     overlayPosition: 'bottom-right',
+    overlayDisplayId: null, // id de l'ecran Electron (null = ecran principal)
     overlayOpacity: 100, // 0-100, 100 = opaque
     autoLaunch: true,
     volume: 80,        // 0-100
@@ -197,16 +198,13 @@ function httpUrlFromWs(wsUrl) {
 // --- overlay ---
 
 function createOverlayWindow() {
-  const primary = screen.getPrimaryDisplay();
-  const { width, height } = primary.workAreaSize;
-  const winWidth = 560;
-  const winHeight = 460;
+  const { x: ox, y: oy, width, height } = getOverlayDisplay().workArea;
 
   overlayWindow = new BrowserWindow({
-    width: winWidth,
-    height: winHeight,
-    x: width - winWidth - 24,
-    y: height - winHeight - 24,
+    width: OVERLAY_WIDTH,
+    height: OVERLAY_HEIGHT,
+    x: ox + width - OVERLAY_WIDTH - 24,
+    y: oy + height - OVERLAY_HEIGHT - 24,
     frame: false,
     transparent: true,
     resizable: false,
@@ -283,11 +281,41 @@ function createOverlayWindow() {
   overlayWindow.loadFile(path.join(__dirname, 'overlay.html'));
 }
 
+const OVERLAY_WIDTH = 560;
+const OVERLAY_HEIGHT = 460;
+
+// Ecran cible de l'overlay : celui choisi par l'user, sinon le principal
+// (aussi si l'ecran choisi a ete debranche)
+function getOverlayDisplay() {
+  const id = store.get('overlayDisplayId');
+  if (id != null) {
+    const d = screen.getAllDisplays().find((x) => x.id === id);
+    if (d) return d;
+  }
+  return screen.getPrimaryDisplay();
+}
+
+// Liste des ecrans pour l'UI, tries de gauche a droite
+function listDisplays() {
+  const primaryId = screen.getPrimaryDisplay().id;
+  return screen.getAllDisplays()
+    .slice()
+    .sort((a, b) => a.bounds.x - b.bounds.x || a.bounds.y - b.bounds.y)
+    .map((d, i) => ({
+      id: d.id,
+      index: i + 1,
+      label: d.label || '',
+      width: Math.round(d.size.width * d.scaleFactor),
+      height: Math.round(d.size.height * d.scaleFactor),
+      primary: d.id === primaryId
+    }));
+}
+
 function positionOverlay(position) {
   if (!overlayWindow) return;
-  const primary = screen.getPrimaryDisplay();
-  const { width, height } = primary.workAreaSize;
-  const [w, h] = overlayWindow.getSize();
+  const { x: ox, y: oy, width, height } = getOverlayDisplay().workArea;
+  const w = OVERLAY_WIDTH;
+  const h = OVERLAY_HEIGHT;
   const margin = 24;
   const positions = {
     'top-left': [margin, margin],
@@ -297,7 +325,11 @@ function positionOverlay(position) {
     'center': [Math.floor((width - w) / 2), Math.floor((height - h) / 2)]
   };
   const [x, y] = positions[position] || positions['bottom-right'];
-  overlayWindow.setPosition(x, y);
+  const bounds = { x: ox + x, y: oy + y, width: w, height: h };
+  overlayWindow.setBounds(bounds);
+  // Windows + ecrans a DPI differents : le 1er setBounds peut mal calculer la
+  // taille quand la fenetre change d'ecran, le 2e la corrige.
+  overlayWindow.setBounds(bounds);
 }
 
 function showMeme({ mediaUrl, mediaKind, audioUrl, text, author, source, customDuration, forceDuration, startTime }) {
@@ -547,6 +579,8 @@ function notifyUserState() {
       disabled: store.get('disabled'),
       autoLaunch: store.get('autoLaunch'),
       overlayPosition: store.get('overlayPosition'),
+      overlayDisplayId: getOverlayDisplay().id,
+      displays: listDisplays(),
       overlayOpacity: store.get('overlayOpacity')
     });
   }
@@ -908,6 +942,8 @@ ipcMain.handle('user:get-state', () => ({
   disabled: store.get('disabled'),
   autoLaunch: store.get('autoLaunch'),
   overlayPosition: store.get('overlayPosition'),
+  overlayDisplayId: getOverlayDisplay().id,
+  displays: listDisplays(),
   overlayOpacity: store.get('overlayOpacity')
 }));
 
@@ -947,6 +983,21 @@ ipcMain.handle('common:set-overlay-position', (_e, pos) => {
   store.set('overlayPosition', pos);
   // Repositionne tout de suite l'overlay
   positionOverlay(pos);
+  notifyUserState();
+  return true;
+});
+
+ipcMain.handle('common:get-displays', () => ({
+  displays: listDisplays(),
+  overlayDisplayId: getOverlayDisplay().id
+}));
+
+ipcMain.handle('common:set-overlay-display', (_e, id) => {
+  const displayId = Number(id);
+  const d = screen.getAllDisplays().find((x) => x.id === displayId);
+  if (!d) return false;
+  store.set('overlayDisplayId', displayId);
+  positionOverlay(store.get('overlayPosition'));
   notifyUserState();
   return true;
 });
@@ -1064,6 +1115,8 @@ ipcMain.handle('admin:get-state', () => ({
   serverUrl: store.get('serverUrl'),
   serverAdminPassword: store.get('serverAdminPassword'),
   overlayPosition: store.get('overlayPosition'),
+  overlayDisplayId: getOverlayDisplay().id,
+  displays: listDisplays(),
   overlayDurationMs: store.get('overlayDurationMs'),
   autoLaunch: store.get('autoLaunch'),
   wsState
@@ -1073,6 +1126,10 @@ ipcMain.handle('admin:save-local', (_e, data) => {
   if (typeof data.serverUrl === 'string') store.set('serverUrl', data.serverUrl.trim());
   if (typeof data.serverAdminPassword === 'string') store.set('serverAdminPassword', data.serverAdminPassword);
   if (typeof data.overlayPosition === 'string') store.set('overlayPosition', data.overlayPosition);
+  if (data.overlayDisplayId != null && screen.getAllDisplays().some((d) => d.id === Number(data.overlayDisplayId))) {
+    store.set('overlayDisplayId', Number(data.overlayDisplayId));
+  }
+  positionOverlay(store.get('overlayPosition'));
   if (data.overlayDurationMs) store.set('overlayDurationMs', Number(data.overlayDurationMs) || 8000);
   if (typeof data.autoLaunch === 'boolean') store.set('autoLaunch', data.autoLaunch);
   ensureAutoLaunch();
@@ -1194,6 +1251,16 @@ if (!gotLock) {
     createTray();
     createOverlayWindow();
     ensureAutoLaunch();
+
+    // Ecran branche / debranche / resolution changee : on recale l'overlay
+    // et on rafraichit la liste des ecrans dans l'UI
+    const onDisplaysChanged = () => {
+      positionOverlay(store.get('overlayPosition'));
+      notifyUserState();
+    };
+    screen.on('display-added', onDisplaysChanged);
+    screen.on('display-removed', onDisplaysChanged);
+    screen.on('display-metrics-changed', onDisplaysChanged);
 
     const mode = store.get('mode');
     const isBootHidden = process.argv.includes('--hidden');

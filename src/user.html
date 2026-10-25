@@ -145,6 +145,35 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Choix de l'ecran (visible seulement si plusieurs ecrans) */
+  .screen-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .screen-row.hidden { display: none; }
+  .screen-btn {
+    background: #2a2c3c;
+    border: 1px solid #3a3d52;
+    border-radius: 6px;
+    color: #e6e6f0;
+    cursor: pointer;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.25;
+    text-align: center;
+    transition: background 120ms, border-color 120ms;
+  }
+  .screen-btn small { display: block; color: #9aa0b4; font-size: 10px; }
+  .screen-btn:hover { background: #34374a; border-color: #5865F2; }
+  .screen-btn.active {
+    background: linear-gradient(135deg, #5865F2, #eb459e);
+    border-color: #5865F2;
+  }
+  .screen-btn.active small { color: #fff; }
+
   /* Position grid */
   .pos-screen {
     background: #1a1b25;
@@ -386,6 +415,7 @@
 
   <div class="section">
     <h2>Position de l'overlay</h2>
+    <div class="screen-row hidden" id="screenRow"></div>
     <div class="pos-screen">
       <div class="pos-grid" id="posGrid">
         <button class="pos-btn" data-pos="top-left" title="Haut gauche"></button>
@@ -481,6 +511,8 @@
     disabled: false,
     autoLaunch: false,
     overlayPosition: 'bottom-right',
+    overlayDisplayId: null,
+    displays: [],
     overlayOpacity: 100,
     rooms: [],
     serverStatus: null
@@ -563,7 +595,32 @@
     document.querySelectorAll('.pos-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.pos === state.overlayPosition);
     });
-    $('posLabel').textContent = POS_LABELS[state.overlayPosition] || state.overlayPosition;
+    let label = POS_LABELS[state.overlayPosition] || state.overlayPosition;
+    if (state.displays.length > 1) {
+      const d = state.displays.find((x) => x.id === state.overlayDisplayId);
+      if (d) label = 'Ecran ' + d.index + ' - ' + label;
+    }
+    $('posLabel').textContent = label;
+    renderScreens();
+  }
+
+  function renderScreens() {
+    const row = $('screenRow');
+    // Un seul ecran : rien a choisir
+    row.classList.toggle('hidden', state.displays.length < 2);
+    row.innerHTML = '';
+    for (const d of state.displays) {
+      const b = document.createElement('button');
+      b.className = 'screen-btn' + (d.id === state.overlayDisplayId ? ' active' : '');
+      b.title = `${d.width}×${d.height}` + (d.primary ? ' - ecran principal' : '');
+      b.innerHTML = `Ecran ${d.index}${d.primary ? ' ★' : ''}<small>${escapeHtml(d.label || d.width + '×' + d.height)}</small>`;
+      b.addEventListener('click', async () => {
+        state.overlayDisplayId = d.id;
+        renderPosition();
+        await window.memedrop.setOverlayDisplay(d.id);
+      });
+      row.appendChild(b);
+    }
   }
 
   function renderOpacity() {
@@ -578,6 +635,8 @@
     state.disabled = !!s.disabled;
     state.autoLaunch = !!s.autoLaunch;
     state.overlayPosition = s.overlayPosition || state.overlayPosition;
+    state.overlayDisplayId = s.overlayDisplayId ?? state.overlayDisplayId;
+    state.displays = s.displays || state.displays;
     state.overlayOpacity = (s.overlayOpacity ?? state.overlayOpacity);
     state.rooms = s.rooms || [];
     state.serverStatus = s.serverStatus ?? state.serverStatus;

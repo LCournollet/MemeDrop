@@ -42,6 +42,8 @@ if (!isSubFrame) contextBridge.exposeInMainWorld('memedrop', {
   quitApp: () => ipcRenderer.invoke('common:quit-app'),
   setAutoLaunch: (enabled) => ipcRenderer.invoke('common:set-auto-launch', enabled),
   setOverlayPosition: (pos) => ipcRenderer.invoke('common:set-overlay-position', pos),
+  getDisplays: () => ipcRenderer.invoke('common:get-displays'),
+  setOverlayDisplay: (id) => ipcRenderer.invoke('common:set-overlay-display', id),
   setOverlayOpacity: (opacity) => ipcRenderer.invoke('common:set-overlay-opacity', opacity),
 
   // Update system

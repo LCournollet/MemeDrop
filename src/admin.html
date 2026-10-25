@@ -308,6 +308,10 @@
         </select>
       </div>
       <div class="field">
+        <label>Ecran overlay</label>
+        <select id="overlayDisplay"></select>
+      </div>
+      <div class="field">
         <label>Duree (ms)</label>
         <input type="number" id="overlayDurationMs" min="2000" max="60000" step="500" />
       </div>
@@ -375,6 +379,10 @@
     $('serverUrl').value = s.serverUrl || '';
     $('serverAdminPassword').value = s.serverAdminPassword || '';
     $('overlayPosition').value = s.overlayPosition || 'bottom-right';
+    $('overlayDisplay').innerHTML = (s.displays || []).map((d) =>
+      `<option value="${d.id}">Ecran ${d.index}${d.label ? ' - ' + escapeHtml(d.label) : ''} (${d.width}×${d.height})${d.primary ? ' - principal' : ''}</option>`
+    ).join('');
+    $('overlayDisplay').value = String(s.overlayDisplayId);
     $('overlayDurationMs').value = s.overlayDurationMs || 8000;
     $('autoLaunch').checked = !!s.autoLaunch;
     renderWsState(s.wsState);
@@ -502,6 +510,7 @@
       serverUrl: $('serverUrl').value.trim(),
       serverAdminPassword: $('serverAdminPassword').value,
       overlayPosition: $('overlayPosition').value,
+      overlayDisplayId: $('overlayDisplay').value ? Number($('overlayDisplay').value) : null,
       overlayDurationMs: Number($('overlayDurationMs').value),
       autoLaunch: $('autoLaunch').checked
     });
