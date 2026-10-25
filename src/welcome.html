@@ -107,20 +107,20 @@
 <body>
   <div class="wrap">
     <h1>MemeDrop</h1>
-    <div class="sub" id="sub">Choisis ton mode</div>
+    <div class="sub" id="sub">Bienvenue !</div>
 
     <!-- Etape 1 : choix mode -->
     <div class="step active" id="stepChoose">
       <div class="cards">
         <div class="card" id="cardUser">
           <div class="icon">👤</div>
-          <div class="label">User</div>
-          <div class="desc">Recevoir les memes de ton salon.</div>
+          <div class="label">Rejoindre un salon</div>
+          <div class="desc">Recevoir les memes avec un code de salon.</div>
         </div>
         <div class="card" id="cardAdmin">
           <div class="icon">🔧</div>
-          <div class="label">Admin</div>
-          <div class="desc">Gerer les salons et le bot.</div>
+          <div class="label">J'heberge un serveur</div>
+          <div class="desc">Gerer ton bot et tes salons MemeDrop.</div>
         </div>
       </div>
     </div>
@@ -138,11 +138,15 @@
       </div>
     </div>
 
-    <!-- Etape 2B : mdp admin (app) -->
+    <!-- Etape 2B : connexion a son propre serveur (mdp ADMIN_PASSWORD du serveur) -->
     <div class="step" id="stepAdminPwd">
       <div class="field">
-        <label>Mot de passe admin de l'app</label>
-        <input type="password" id="adminAppPwd" placeholder="••••••••" autocomplete="off" />
+        <label>URL du serveur</label>
+        <input type="text" id="adminServerUrl" placeholder="ws://1.2.3.4:8787" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>Mot de passe admin du serveur</label>
+        <input type="password" id="adminAppPwd" placeholder="ADMIN_PASSWORD" autocomplete="off" />
       </div>
       <div class="err" id="adminErr"></div>
       <div class="row-btn">
@@ -166,16 +170,20 @@
     show('stepUserCode', 'Entre le code que ton admin t\'a donne');
     $('userCode').focus();
   });
-  $('cardAdmin').addEventListener('click', () => {
-    show('stepAdminPwd', 'Acces restreint');
+  $('cardAdmin').addEventListener('click', async () => {
+    show('stepAdminPwd', 'Connecte l\'app a ton serveur MemeDrop');
+    if (!$('adminServerUrl').value) {
+      const d = await window.memedrop.getWelcomeDefaults();
+      $('adminServerUrl').value = d.serverUrl || '';
+    }
     $('adminAppPwd').focus();
   });
   $('userBack').addEventListener('click', () => {
-    show('stepChoose', 'Choisis ton mode');
+    show('stepChoose', 'Bienvenue !');
     $('userErr').textContent = '';
   });
   $('adminBack').addEventListener('click', () => {
-    show('stepChoose', 'Choisis ton mode');
+    show('stepChoose', 'Bienvenue !');
     $('adminErr').textContent = '';
   });
 
@@ -187,12 +195,19 @@
     if (!ok) $('userErr').textContent = 'Echec';
   }
 
+  const ADMIN_ERRORS = {
+    bad_url: 'URL invalide (ws://... ou wss://...)',
+    missing_password: 'Mot de passe manquant',
+    bad_password: 'Mot de passe incorrect',
+    unreachable: 'Serveur injoignable'
+  };
+
   async function submitAdmin() {
     const pwd = $('adminAppPwd').value;
     if (!pwd) { $('adminErr').textContent = 'Mot de passe manquant'; return; }
-    $('adminErr').textContent = '';
-    const ok = await window.memedrop.chooseAdmin(pwd);
-    if (!ok) $('adminErr').textContent = 'Mot de passe incorrect';
+    $('adminErr').textContent = 'Connexion...';
+    const r = await window.memedrop.setupAdmin({ serverUrl: $('adminServerUrl').value, password: pwd });
+    if (!r.ok) $('adminErr').textContent = ADMIN_ERRORS[r.error] || 'Echec';
   }
 
   $('userOk').addEventListener('click', submitUser);

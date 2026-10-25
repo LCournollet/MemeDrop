@@ -2,11 +2,13 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ChannelType, PermissionFlagsBits } = require('discord.js');
 
 const PORT = Number(process.env.PORT) || 8787;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456';
+// Pas de valeur par defaut : sans ADMIN_PASSWORD, l'API admin est desactivee
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, 'config.json');
 const LIBRARY_PATH = process.env.LIBRARY_PATH || path.join(__dirname, 'library.json');
 const LIBRARY_MAX_ENTRIES = 5000;
@@ -726,9 +728,94 @@ function send(res, code, payload, type = 'application/json') {
   res.end(type === 'application/json' ? JSON.stringify(payload) : payload);
 }
 
+function isAdminPassword(pwd) {
+  if (!ADMIN_PASSWORD || typeof pwd !== 'string' || !pwd) return false;
+  const a = Buffer.from(pwd);
+  const b = Buffer.from(ADMIN_PASSWORD);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 function checkAdmin(req) {
-  const pwd = req.headers['x-admin-password'];
-  return pwd && pwd === ADMIN_PASSWORD;
+  return isAdminPassword(req.headers['x-admin-password']);
+}
+
+// Permissions demandees a l'invitation du bot : voir les salons, envoyer des
+// messages, lire l'historique, gerer les webhooks (renvoi depuis la bibliotheque)
+const BOT_INVITE_PERMISSIONS = PermissionFlagsBits.ViewChannel
+  | PermissionFlagsBits.SendMessages
+  | PermissionFlagsBits.ReadMessageHistory
+  | PermissionFlagsBits.ManageWebhooks;
+
+function botInviteUrl() {
+  const id = discordClient?.user?.id;
+  if (!id) return null;
+  return 'https://discord.com/oauth2/authorize?client_id=' + id
+    + '&scope=bot&permissions=' + BOT_INVITE_PERMISSIONS.toString();
+}
+
+function roomInfo(r, perRoom) {
+  return {
+    code: r.code,
+    channelId: r.channelId,
+    name: r.name || '',
+    connectedClients: perRoom[r.code] || 0
+  };
+}
+
+// Tous les serveurs Discord ou le bot est present, avec leurs salons texte
+// et les salons MemeDrop rattaches. Les salons MemeDrop dont le channel n'est
+// dans aucun serveur connu sont renvoyes a part (orphans).
+function buildGuildsSummary() {
+  const perRoom = countClientsPerRoom();
+  const seenRoomCodes = new Set();
+  const guilds = [];
+  const cache = discordClient?.guilds?.cache;
+  if (cache) {
+    for (const g of cache.values()) {
+      const me = g.members.me;
+      const channels = [...g.channels.cache.values()]
+        .filter((c) => c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement)
+        .sort((a, b) => a.rawPosition - b.rawPosition)
+        .map((c) => {
+          const perms = me ? c.permissionsFor(me) : null;
+          return {
+            id: c.id,
+            name: c.name,
+            canRead: !!perms?.has(PermissionFlagsBits.ViewChannel),
+            canWebhook: !!perms?.has(PermissionFlagsBits.ManageWebhooks)
+          };
+        });
+      const rooms = config.rooms
+        .filter((r) => g.channels.cache.has(r.channelId))
+        .map((r) => {
+          seenRoomCodes.add(r.code);
+          return { ...roomInfo(r, perRoom), channelName: g.channels.cache.get(r.channelId)?.name || '' };
+        });
+      guilds.push({
+        id: g.id,
+        name: g.name,
+        iconUrl: g.iconURL({ size: 64, extension: 'png' }) || null,
+        memberCount: g.memberCount || 0,
+        channels,
+        rooms
+      });
+    }
+  }
+  guilds.sort((a, b) => a.name.localeCompare(b.name));
+  const orphans = config.rooms
+    .filter((r) => !seenRoomCodes.has(r.code))
+    .map((r) => roomInfo(r, perRoom));
+  return { guilds, orphans };
+}
+
+// Code de salon aleatoire lisible (sans 0/o/1/l pour eviter les confusions)
+function generateRoomCode() {
+  const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789';
+  for (;;) {
+    let code = '';
+    for (const b of crypto.randomBytes(6)) code += alphabet[b % alphabet.length];
+    if (!findRoomByCode(code)) return code;
+  }
 }
 
 // Renvoie l'array de room codes que le client est autorise a manipuler.
@@ -779,15 +866,35 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, {
       status: discordStatus,
       tag: discordTag,
+      inviteUrl: botInviteUrl(),
       clients: clients.size,
       hasToken: !!config.botToken,
-      rooms: config.rooms.map((r) => ({
-        code: r.code,
-        channelId: r.channelId,
-        name: r.name || '',
-        connectedClients: perRoom[r.code] || 0
-      }))
+      rooms: config.rooms.map((r) => roomInfo(r, perRoom))
     });
+  }
+
+  if (url.pathname === '/admin/guilds' && req.method === 'GET') {
+    if (!checkAdmin(req)) return send(res, 401, { error: 'unauthorized' });
+    return send(res, 200, buildGuildsSummary());
+  }
+
+  const leaveMatch = url.pathname.match(/^\/admin\/guilds\/(\d+)$/);
+  if (leaveMatch && req.method === 'DELETE') {
+    if (!checkAdmin(req)) return send(res, 401, { error: 'unauthorized' });
+    const guild = discordClient?.guilds?.cache.get(leaveMatch[1]);
+    if (!guild) return send(res, 404, { error: 'guild_not_found' });
+    try {
+      // Les salons MemeDrop de ce serveur deviennent inutiles : on les retire
+      const before = config.rooms.length;
+      config.rooms = config.rooms.filter((r) => !guild.channels.cache.has(r.channelId));
+      saveConfig();
+      await guild.leave();
+      const removedRooms = before - config.rooms.length;
+      console.log(`[admin] bot retire du serveur ${guild.name} (${guild.id}), ${removedRooms} salon(s) supprime(s)`);
+      return send(res, 200, { ok: true, removedRooms });
+    } catch (e) {
+      return send(res, 502, { error: 'leave_failed', message: e.message });
+    }
   }
 
   if (url.pathname === '/admin/token' && req.method === 'POST') {
@@ -809,24 +916,19 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/admin/rooms' && req.method === 'GET') {
     if (!checkAdmin(req)) return send(res, 401, { error: 'unauthorized' });
     const perRoom = countClientsPerRoom();
-    return send(res, 200, {
-      rooms: config.rooms.map((r) => ({
-        code: r.code,
-        channelId: r.channelId,
-        name: r.name || '',
-        connectedClients: perRoom[r.code] || 0
-      }))
-    });
+    return send(res, 200, { rooms: config.rooms.map((r) => roomInfo(r, perRoom)) });
   }
 
   if (url.pathname === '/admin/rooms' && req.method === 'POST') {
     if (!checkAdmin(req)) return send(res, 401, { error: 'unauthorized' });
     try {
       const body = await readJson(req);
-      const code = String(body.code || '').trim();
+      // Code vide = genere automatiquement
+      const code = String(body.code || '').trim() || generateRoomCode();
       const channelId = String(body.channelId || '').trim();
       const name = String(body.name || '').trim();
-      if (!code || !channelId) return send(res, 400, { error: 'missing_fields' });
+      if (!/^\d{5,25}$/.test(channelId)) return send(res, 400, { error: 'missing_fields' });
+      if (!/^[A-Za-z0-9_-]{2,40}$/.test(code)) return send(res, 400, { error: 'invalid_code' });
       const existing = findRoomByCode(code);
       if (existing) {
         existing.channelId = channelId;
@@ -835,7 +937,7 @@ const server = http.createServer(async (req, res) => {
         config.rooms.push({ code, channelId, name });
       }
       saveConfig();
-      return send(res, 200, { ok: true });
+      return send(res, 200, { ok: true, code });
     } catch {
       return send(res, 400, { error: 'bad_json' });
     }
@@ -976,7 +1078,7 @@ server.on('upgrade', (req, socket, head) => {
 
   // Auth admin via mdp
   if (adminParam) {
-    if (adminParam !== ADMIN_PASSWORD) { socket.destroy(); return; }
+    if (!isAdminPassword(adminParam)) { socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, (ws) => {
       ws._admin = true;
       ws._room = null;
@@ -1032,6 +1134,7 @@ async function pollLatestRelease() {
 
 server.listen(PORT, () => {
   console.log(`[memedrop-server] listening on :${PORT}`);
+  if (!ADMIN_PASSWORD) console.warn('[memedrop-server] ADMIN_PASSWORD non defini : API admin desactivee');
   startDiscord();
   // Premier check au demarrage, puis toutes les 5 min
   pollLatestRelease();

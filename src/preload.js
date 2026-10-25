@@ -23,22 +23,25 @@ if (!isSubFrame) contextBridge.exposeInMainWorld('memedrop', {
 
   // Welcome screen
   chooseUser: (code) => ipcRenderer.invoke('welcome:choose-user', code),
-  chooseAdmin: (pwd) => ipcRenderer.invoke('welcome:choose-admin', pwd),
+  setupAdmin: (data) => ipcRenderer.invoke('welcome:setup-admin', data),
+  getWelcomeDefaults: () => ipcRenderer.invoke('welcome:get-defaults'),
 
-  // Admin panel
+  // Panneau Gestion (admin du serveur)
+  openAdmin: () => ipcRenderer.invoke('admin:open'),
   getAdminState: () => ipcRenderer.invoke('admin:get-state'),
-  saveLocal: (data) => ipcRenderer.invoke('admin:save-local', data),
+  adminLogin: (data) => ipcRenderer.invoke('admin:login', data),
+  adminLogout: () => ipcRenderer.invoke('admin:logout'),
+  adminGuilds: () => ipcRenderer.invoke('admin:guilds'),
+  leaveGuild: (guildId) => ipcRenderer.invoke('admin:leave-guild', guildId),
   pushToken: (token) => ipcRenderer.invoke('admin:push-token', token),
   addRoom: (room) => ipcRenderer.invoke('admin:add-room', room),
   deleteRoom: (code) => ipcRenderer.invoke('admin:delete-room', code),
   serverStatus: () => ipcRenderer.invoke('admin:server-status'),
   broadcastTest: (code) => ipcRenderer.invoke('admin:broadcast-test', code),
   testOverlayLocal: () => ipcRenderer.invoke('admin:test-overlay-local'),
-  onWsStatus: (cb) => ipcRenderer.on('ws:status', (_e, data) => cb(data)),
 
   // Common
   openLink: (url) => ipcRenderer.invoke('common:open-link', url),
-  backToWelcome: () => ipcRenderer.invoke('common:back-to-welcome'),
   quitApp: () => ipcRenderer.invoke('common:quit-app'),
   setAutoLaunch: (enabled) => ipcRenderer.invoke('common:set-auto-launch', enabled),
   setOverlayPosition: (pos) => ipcRenderer.invoke('common:set-overlay-position', pos),

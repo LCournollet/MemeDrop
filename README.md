@@ -1,69 +1,144 @@
-# MemeDrop
+<p align="center">
+  <img src="assets/icon.png" width="96" alt="MemeDrop" />
+</p>
 
-Application Windows qui ecoute un channel Discord et affiche en overlay transparent les images + texte poses dedans, sur l'ecran de tous les utilisateurs connectes. Demarre automatiquement avec Windows.
+<h1 align="center">MemeDrop</h1>
 
-## Architecture
+<p align="center">
+  <b>Balance un meme sur Discord, il s'affiche sur l'écran de tous tes potes.</b><br />
+  Par-dessus leurs jeux, leurs vidéos, tout. Instantanément.
+</p>
+
+<p align="center">
+  <a href="https://memedrop.57-131-40-94.sslip.io/">📥 Télécharger</a> ·
+  <a href="#-héberger-ta-propre-instance">🛠️ Héberger ta propre instance</a>
+</p>
+
+---
+
+## ✨ C'est quoi ?
+
+MemeDrop est une petite app Windows qui tourne discrètement dans la barre des tâches.
+Quand quelqu'un poste une image, un GIF ou une vidéo dans un salon Discord relié à MemeDrop, ça **pop en overlay** sur l'écran de tous ceux qui ont l'app, avec le pseudo et l'avatar de l'auteur.
+
+- 🖼️ **Images, GIFs, vidéos, sons**, envoyés en pièce jointe ou en lien
+- 🎬 **TikTok, YouTube (Shorts inclus), Twitter/X, Instagram** : on colle le lien, la vidéo se lance
+- 🎮 **Par-dessus tout**, même en jeu plein écran
+- 🔊 **Volume, mute, et réception on/off** depuis l'icône de la barre des tâches
+- 🖥️ **Choix de l'écran et de la position** (multi-écrans), opacité réglable
+- 📚 **Bibliothèque** de tous les memes déjà passés, avec favoris, pour les renvoyer en un clic
+- 🔄 **Mises à jour automatiques**
+
+## 🧩 Comment ça marche
 
 ```
-   Toi (Discord)                 Bot Discord                Friends (MemeDrop client)
-+--------------+   message    +---------------+   relay   +-------------------------+
-| Channel meme | -----------> | Ecoute MSG    | --------> | Overlay transparent     |
-| (image+text) |              | Content Intent|           | always-on-top + auto-   |
-+--------------+              +---------------+           | start Windows           |
-                                                          +-------------------------+
+  Discord                       Serveur MemeDrop                  L'app chez tes potes
+┌────────────┐   message    ┌────────────────────────┐   live   ┌──────────────────────┐
+│  #memes    │ ───────────▶ │ Bot Discord + relais   │ ───────▶ │ Overlay par-dessus   │
+└────────────┘              └────────────────────────┘          │ tout l'écran         │
+                                                                └──────────────────────┘
 ```
 
-Une seule app Electron, installee par toi + chaque ami. Tous configures avec le meme token de bot et le meme channel.
+Un **bot Discord** écoute les salons reliés à MemeDrop et transmet chaque meme aux apps connectées.
+Chaque salon a un **code** (par exemple `lycee2025`) : c'est tout ce dont tes potes ont besoin pour le rejoindre.
 
-## Setup du bot Discord (une seule fois)
+## 🚀 Utiliser MemeDrop
 
-1. Va sur https://discord.com/developers/applications -> **New Application** -> nomme-la "MemeDrop".
-2. Onglet **Bot** -> **Add Bot** -> dans "Privileged Gateway Intents" active **MESSAGE CONTENT INTENT**.
-3. Onglet **Bot** -> **Reset Token** -> copie le token (garde-le secret).
-4. Onglet **OAuth2 > URL Generator** :
-   - Scopes : `bot`
-   - Bot Permissions : `View Channels`, `Read Message History`
-   - Copie l'URL en bas, ouvre-la et invite le bot dans ton serveur.
-5. Dans Discord, active le **mode developpeur** (Parametres > Avances > Mode developpeur), clic droit sur ton channel meme -> **Copier l'identifiant** = `channelId`.
+1. **Télécharge et installe** l'app depuis le [site de téléchargement](https://memedrop.57-131-40-94.sslip.io/).
+2. Au premier lancement, choisis **Rejoindre un salon** et entre le code qu'on t'a donné.
+3. C'est prêt. L'app se range dans la barre des tâches (près de l'horloge) et se lance avec Windows.
 
-## Installation (developpement)
+Tu peux rejoindre plusieurs salons, et en ajouter ou en retirer à tout moment dans la fenêtre principale.
 
-```powershell
-cd c:\Users\Toyger\Desktop\MemeDrop
+### 💬 Commandes Discord
+
+À taper à la fin de ton message dans le salon :
+
+| Commande | Effet | Exemple |
+|---|---|---|
+| `:N` | Affiche le meme pendant **N secondes** (60 max) | `regarde ça :15` |
+| `/N` | Démarre la vidéo à **N secondes** | `https://youtu.be/... /42` |
+| `!!STOP` | Coupe le meme en cours (message seul) | `!!STOP` |
+
+Les commandes se combinent : `trop drôle :20 /5`.
+
+## 🛠️ Héberger ta propre instance
+
+Tu veux MemeDrop pour ta bande, avec ton propre bot ? Forke le dépôt et suis le guide. Ton instance est indépendante : tu ne vois et ne gères que **tes** serveurs Discord.
+
+### 1. Crée le bot Discord
+
+1. Va sur le [Discord Developer Portal](https://discord.com/developers/applications) → **New Application**.
+2. Onglet **Bot** → active **MESSAGE CONTENT INTENT**.
+3. **Reset Token** → copie le token et garde-le secret.
+
+### 2. Lance le serveur
+
+Le serveur (dossier [`server/`](server/)) tourne sur n'importe quel VPS avec Node.js 20+. Le guide pas à pas (Oracle Cloud gratuit, systemd, Docker) est dans [server/README.md](server/README.md).
+
+```bash
+cd server
 npm install
-npm start
+ADMIN_PASSWORD="un-mot-de-passe-long-et-unique" node server.js
 ```
 
-Au premier lancement la fenetre Parametres s'ouvre. Colle le token + channelId, clique **Enregistrer & connecter**. L'app se met ensuite dans le **system tray** (icone en bas a droite). Double-clic dessus = reouvrir les parametres.
+> ⚠️ `ADMIN_PASSWORD` est **obligatoire** : sans lui, l'administration du serveur est désactivée.
+>
+> 💡 Installe aussi [yt-dlp](https://github.com/yt-dlp/yt-dlp) sur le serveur : il sert à récupérer les vidéos Instagram et de secours pour TikTok et Twitter/X.
 
-Teste avec le bouton **Test overlay** ou en envoyant une image dans le channel.
+### 3. Prépare l'app
 
-## Build de l'installeur Windows (.exe)
+En haut de [`src/main.js`](src/main.js), mets l'adresse de ton serveur :
+
+```js
+const DEFAULT_SERVER_URL = 'ws://ton-serveur:8787';
+```
+
+Puis construis l'installeur (voir [Développement](#-développement)) et partage-le.
+
+### 4. Configure tout depuis l'app
+
+1. Lance l'app → **J'heberge un serveur** → l'adresse de ton serveur + ton `ADMIN_PASSWORD`.
+2. Le panneau **⚙ Gestion** s'ouvre :
+   - **Changer le token du bot** → colle le token de l'étape 1 ;
+   - **Inviter le bot sur un serveur Discord** → choisis ton serveur ;
+   - dans la carte de ton serveur, choisis un channel → **Créer le salon**.
+3. Donne le **code du salon** à tes potes. C'est parti 🎉
+
+Le panneau Gestion s'ajoute à l'app normale (bouton ⚙ en haut) : tu continues à recevoir les memes comme tout le monde. Il liste tous les serveurs Discord où ton bot est présent, avec leurs salons et le nombre d'apps connectées.
+
+## 💻 Développement
 
 ```powershell
-npm run build
+npm install
+npm start          # lance l'app
+npm run build      # crée l'installeur dans dist/
 ```
 
-Genere `dist/MemeDrop Setup 0.1.0.exe`. Envoie ce fichier a tes amis. Ils l'installent, lancent l'app, collent **le meme token et channelId**, et c'est bon.
+Pour un serveur local : `cd server && npm install && ADMIN_PASSWORD=test node server.js`, puis dans l'app, l'adresse `ws://localhost:8787`.
 
-## Comportement attendu
+Sur ce dépôt, chaque changement de version dans `package.json` poussé sur `main` lance automatiquement le build et la publication de l'installeur (GitHub Actions).
 
-- App tourne en arriere-plan via le system tray.
-- Quand quelqu'un poste dans le channel configure, **tous les amis avec MemeDrop ouvert** voient un overlay transparent apparaitre par-dessus toutes leurs apps (jeux full screen y compris).
-- L'overlay disparait apres la duree configuree (defaut 8s).
-- Lancement automatique au demarrage Windows (case a cocher dans les parametres).
+## 🗂️ Structure
 
-## Limites / notes
+| Chemin | Rôle |
+|---|---|
+| `src/main.js` | Cœur de l'app Electron : barre des tâches, fenêtres, connexion aux salons, mises à jour |
+| `src/overlay.html` | L'overlay transparent qui affiche les memes |
+| `src/user.html` | Fenêtre principale : salons, volume, écran, position |
+| `src/admin.html` | Panneau Gestion : bot, serveurs Discord, salons |
+| `src/welcome.html` | Écran du premier lancement |
+| `src/library.html` | Bibliothèque des memes |
+| `server/` | Bot Discord + relais temps réel |
+| `site/` | Page de téléchargement |
 
-- Si un ami ferme l'app, il rate les memes en attendant. Pas de "rattrapage" (intentionnel).
-- Le token de bot est partage entre tous les clients. Ne le mets pas sur GitHub. Tout client avec le token peut lire le channel.
-- Pour un usage plus serieux : faire passer par un petit serveur relais (websocket) au lieu de donner le token a chacun. Pour un usage entre potes c'est OK.
-- Pour ajouter une vraie icone, mets un `assets/icon.ico` (256x256) et `assets/icon.png` (256x256) avant de build.
+## ❓ FAQ
 
-## Structure
+**Le meme ne s'affiche pas ?**
+Vérifie dans la fenêtre principale que le salon est bien « Connecté », et que « Recevoir les memes » est activé dans l'icône de la barre des tâches.
 
-- `src/main.js` - Process principal Electron (bot Discord, tray, fenetres).
-- `src/overlay.html` - Overlay transparent always-on-top.
-- `src/settings.html` - UI de configuration.
-- `src/preload.js` - Bridge IPC securise.
-- `package.json` - Config electron-builder pour NSIS Windows.
+**Un lien Instagram s'affiche juste en texte ?**
+Instagram bloque souvent les serveurs. Le serveur a besoin de yt-dlp à jour, et ça peut quand même échouer de temps en temps.
+
+**Ça marche sur Mac ou Linux ?**
+Pas pour l'instant : l'app est pensée et testée pour Windows.

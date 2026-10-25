@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>MemeDrop - Admin</title>
+<title>MemeDrop - Gestion</title>
 <style>
   :root { color-scheme: dark; }
   html, body {
@@ -14,36 +14,15 @@
     font-size: 14px;
   }
   .wrap { padding: 22px 26px; }
-  .header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 4px;
-  }
-  .back-btn {
-    background: #2a2c3c;
-    border: 1px solid #3a3d52;
-    color: #e6e6f0;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-  }
-  .back-btn:hover { background: #34374a; border-color: #5865F2; }
   h1 {
-    margin: 0;
+    margin: 0 0 4px;
     font-size: 22px;
     background: linear-gradient(90deg, #5865F2, #eb459e);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
-  .sub { color: #9aa0b4; font-size: 12px; margin-bottom: 16px; }
+  .sub { color: #9aa0b4; font-size: 12px; margin-bottom: 16px; word-break: break-all; }
 
   .section {
     background: #25273a;
@@ -70,7 +49,7 @@
     text-transform: uppercase;
     letter-spacing: 0.4px;
   }
-  input[type=text], input[type=password], input[type=number], select {
+  input[type=text], input[type=password], select {
     width: 100%;
     box-sizing: border-box;
     padding: 8px 11px;
@@ -82,14 +61,12 @@
     outline: none;
   }
   input:focus, select:focus { border-color: #5865F2; }
-  .hint { font-size: 11px; color: #7c8099; margin-top: 4px; }
+  .hint { font-size: 11px; color: #7c8099; margin-top: 4px; line-height: 1.45; }
   .hint a { color: #8ea0ff; cursor: pointer; }
+  .err { color: #f06363; font-size: 12px; min-height: 16px; margin-top: 8px; }
 
-  .row { display: flex; gap: 10px; }
-  .row > .field { flex: 1; }
-
-  .check { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
-  .check input { width: 16px; height: 16px; }
+  .row { display: flex; gap: 10px; align-items: flex-end; }
+  .row > .field { flex: 1; margin-bottom: 0; }
 
   .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   button {
@@ -99,6 +76,7 @@
     font-weight: 600;
     cursor: pointer;
     font-size: 12.5px;
+    white-space: nowrap;
   }
   .btn-primary { background: #5865F2; color: #fff; }
   .btn-primary:hover { background: #4752c4; }
@@ -106,7 +84,9 @@
   .btn-secondary:hover { background: #34374a; }
   .btn-danger { background: #4a1f1f; color: #f06363; border: 1px solid #6e2a2a; }
   .btn-danger:hover { background: #5a2727; }
+  .btn-ok { background: #1f4d3a; color: #43d68f; border: 1px solid #2c6b50; cursor: default; }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-sm { padding: 4px 9px; font-size: 11px; }
 
   .badge {
     display: inline-block;
@@ -128,17 +108,56 @@
     margin-bottom: 8px;
     font-size: 12.5px;
   }
-  .status-line:last-child { margin-bottom: 0; }
   .status-line .key { color: #9aa0b4; }
   .status-line .val { font-weight: 600; }
 
-  .rooms-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 4px;
+  details summary {
+    cursor: pointer;
+    color: #b9bccd;
+    font-size: 12.5px;
+    margin-top: 6px;
+    user-select: none;
   }
+  details[open] summary { margin-bottom: 10px; }
+
+  /* Serveurs Discord */
+  .guild {
+    border: 1px solid #32354a;
+    border-radius: 9px;
+    background: #212332;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .guild:last-child { margin-bottom: 0; }
+  .guild-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: #282a3d;
+  }
+  .guild-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #3a3d52;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    color: #b9bccd;
+    object-fit: cover;
+  }
+  .guild-name { font-weight: 700; font-size: 14px; }
+  .guild-meta { font-size: 11px; color: #9aa0b4; }
+  .guild-head .grow { flex: 1; min-width: 0; }
+  .guild-body { padding: 8px 12px 12px; }
+
+  .rooms-table { width: 100%; border-collapse: collapse; }
   .rooms-table th, .rooms-table td {
-    padding: 7px 8px;
+    padding: 6px 6px;
     text-align: left;
     border-bottom: 1px solid #32354a;
     font-size: 12.5px;
@@ -151,413 +170,325 @@
     letter-spacing: 0.4px;
   }
   .rooms-table tr:last-child td { border-bottom: none; }
-  .rooms-table .code-cell {
+  .rooms-table td.acts { text-align: right; white-space: nowrap; }
+  .rooms-table td.acts button { margin-left: 4px; }
+  .code-cell {
     font-family: 'Cascadia Code', Consolas, monospace;
     color: #43d68f;
     font-weight: 600;
   }
-  .rooms-table .channel-cell {
-    font-family: 'Cascadia Code', Consolas, monospace;
-    color: #b9bccd;
-    font-size: 11.5px;
-  }
-  .rooms-table button {
-    padding: 4px 9px;
-    font-size: 11px;
-  }
-  .rooms-empty {
-    text-align: center;
-    color: #7c8099;
-    font-size: 12px;
-    padding: 14px 0;
-    font-style: italic;
-  }
+  .channel-cell { color: #b9bccd; }
+  .muted { color: #7c8099; font-size: 12px; font-style: italic; padding: 6px 0; }
 
-  /* Banniere update */
-  .update-banner {
-    display: none;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    margin-bottom: 14px;
-    background: linear-gradient(90deg, rgba(88,101,242,0.15), rgba(235,69,158,0.15));
-    border: 1px solid #5865F2;
-    border-radius: 10px;
+  .add-room {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #3a3d52;
   }
-  .update-banner.visible { display: flex; }
-  .update-banner .info { flex: 1; font-size: 13px; }
-  .update-banner .info strong { color: #fff; }
-  .update-banner .info .small { font-size: 11px; color: #b9bccd; margin-top: 2px; }
-  .update-banner button.upd {
-    background: #5865F2;
-    color: #fff;
-    border: none;
-    padding: 8px 14px;
-    border-radius: 7px;
-    font-weight: 600;
-    cursor: pointer;
-    font-size: 12.5px;
-    white-space: nowrap;
-  }
-  .update-banner button.upd:hover { background: #4752c4; }
-  .update-banner button.upd:disabled { opacity: 0.6; cursor: not-allowed; }
+  .add-room .row > .field.code { flex: 0 0 120px; }
+
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="header">
-    <button class="back-btn" id="btnBack" title="Retour au menu">&#8592;</button>
-    <h1>MemeDrop - Admin</h1>
-  </div>
-  <div class="sub">Le bot Discord et les salons sont geres sur le serveur.</div>
+  <h1>MemeDrop - Gestion</h1>
+  <div class="sub" id="sub">Gestion de ton serveur MemeDrop et du bot Discord.</div>
 
-  <div class="update-banner" id="updateBanner">
-    <div class="info">
-      <strong>📦 Mise a jour disponible</strong>
-      <div class="small" id="updateLabel"></div>
-    </div>
-    <button class="upd" id="btnUpdate">Telecharger</button>
-  </div>
-
-  <div class="section">
-    <h2>Connexion serveur</h2>
+  <!-- Connexion : mdp ADMIN_PASSWORD du serveur -->
+  <div class="section" id="loginView">
+    <h2>Connexion au serveur</h2>
     <div class="field">
       <label>URL du serveur (ws:// ou wss://)</label>
-      <input type="text" id="serverUrl" placeholder="ws://1.2.3.4:8787" />
+      <input type="text" id="loginUrl" placeholder="ws://1.2.3.4:8787" />
     </div>
     <div class="field">
-      <label>Mot de passe API serveur</label>
-      <input type="password" id="serverAdminPassword" />
+      <label>Mot de passe admin du serveur</label>
+      <input type="password" id="loginPwd" autocomplete="off" />
+      <div class="hint">C'est la variable <b>ADMIN_PASSWORD</b> definie sur ton serveur MemeDrop (voir server/README.md).</div>
     </div>
+    <div class="err" id="loginErr"></div>
     <div class="actions">
-      <button class="btn-secondary" id="btnSaveLocal">Sauvegarder & reconnecter</button>
+      <button class="btn-primary" id="btnLogin">Se connecter</button>
     </div>
   </div>
 
-  <div class="section">
-    <h2>Bot Discord</h2>
-    <div class="field">
-      <label>Token du bot Discord</label>
-      <input type="password" id="botToken" placeholder="MTAxxxxxxx..." autocomplete="off" />
-      <div class="hint">Cree sur <a id="lnkDevPortal">discord.com/developers</a> avec MESSAGE CONTENT INTENT active. Le bot doit etre invite dans tous les serveurs Discord o&ugrave; sont les channels que tu veux mapper.</div>
-    </div>
-    <div class="actions">
-      <button class="btn-primary" id="btnPushToken">Envoyer le token au serveur</button>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Salons</h2>
-    <table class="rooms-table" id="roomsTable">
-      <thead>
-        <tr>
-          <th>Code</th>
-          <th>Nom</th>
-          <th>Channel ID</th>
-          <th>Clients</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="roomsBody"></tbody>
-    </table>
-    <div class="rooms-empty" id="roomsEmpty">Aucun salon. Ajoute-en un ci-dessous.</div>
-
-    <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid #32354a;">
-      <div class="row">
-        <div class="field">
-          <label>Code du salon</label>
-          <input type="text" id="newRoomCode" placeholder="ex: lycee2025" />
-        </div>
-        <div class="field">
-          <label>Nom (optionnel)</label>
-          <input type="text" id="newRoomName" placeholder="Mes potes du lycee" />
-        </div>
-      </div>
-      <div class="field">
-        <label>Channel ID Discord</label>
-        <input type="text" id="newRoomChannel" placeholder="123456789012345678" />
-      </div>
+  <div id="mainView" class="hidden">
+    <div class="section">
+      <h2>Serveur MemeDrop</h2>
+      <div class="status-line"><span class="key">Bot Discord</span><span class="val" id="botState"><span class="badge b-idle">...</span></span></div>
+      <div class="status-line"><span class="key">Apps connectees</span><span class="val" id="nbClients">-</span></div>
+      <div class="status-line"><span class="key">Salons MemeDrop</span><span class="val" id="nbRooms">-</span></div>
       <div class="actions">
-        <button class="btn-primary" id="btnAddRoom">Ajouter / mettre a jour</button>
+        <button class="btn-primary" id="btnInvite" disabled>Inviter le bot sur un serveur Discord</button>
+        <button class="btn-secondary" id="btnRefresh">Rafraichir</button>
+        <button class="btn-secondary" id="btnLogout">Se deconnecter</button>
       </div>
+      <details>
+        <summary>Changer le token du bot</summary>
+        <div class="field">
+          <label>Token du bot Discord</label>
+          <input type="password" id="botToken" placeholder="MTAxxxxxxx..." autocomplete="off" />
+          <div class="hint">Cree sur <a id="lnkDevPortal">discord.com/developers</a> avec MESSAGE CONTENT INTENT active.</div>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" id="btnPushToken">Envoyer le token au serveur</button>
+        </div>
+      </details>
     </div>
-  </div>
 
-  <div class="section">
-    <h2>Statut</h2>
-    <div class="status-line"><span class="key">Client WS</span><span class="val" id="wsState"><span class="badge b-idle">...</span></span></div>
-    <div class="status-line"><span class="key">Serveur</span><span class="val" id="srvReachable"><span class="badge b-idle">...</span></span></div>
-    <div class="status-line"><span class="key">Bot Discord</span><span class="val" id="botState"><span class="badge b-idle">...</span></span></div>
-    <div class="status-line"><span class="key">Clients connectes (total)</span><span class="val" id="nbClients">-</span></div>
-    <div class="actions">
-      <button class="btn-secondary" id="btnRefresh">Rafraichir</button>
+    <div class="section">
+      <h2 id="guildsTitle">Serveurs Discord</h2>
+      <div id="guildsList"></div>
     </div>
-  </div>
 
-  <div class="section">
-    <h2>Tester / Overlay local</h2>
-    <div class="row">
-      <div class="field">
-        <label>Position overlay</label>
-        <select id="overlayPosition">
-          <option value="bottom-right">Bas droite</option>
-          <option value="bottom-left">Bas gauche</option>
-          <option value="top-right">Haut droite</option>
-          <option value="top-left">Haut gauche</option>
-          <option value="center">Centre</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Ecran overlay</label>
-        <select id="overlayDisplay"></select>
-      </div>
-      <div class="field">
-        <label>Duree (ms)</label>
-        <input type="number" id="overlayDurationMs" min="2000" max="60000" step="500" />
-      </div>
+    <div class="section hidden" id="orphansSection">
+      <h2>Salons sans serveur Discord</h2>
+      <div class="hint" style="margin: -6px 0 8px;">Le bot ne voit plus le channel de ces salons (bot retire du serveur ou channel supprime).</div>
+      <table class="rooms-table"><tbody id="orphansBody"></tbody></table>
     </div>
-    <label class="check">
-      <input type="checkbox" id="autoLaunch" />
-      Lancer MemeDrop au demarrage de Windows
-    </label>
-    <div class="field" style="margin-top: 12px;">
-      <label>Code salon pour test broadcast (vide = tous)</label>
-      <input type="text" id="testRoomCode" placeholder="ex: lycee2025" />
-    </div>
-    <div class="actions">
-      <button class="btn-secondary" id="btnTestLocal">Test overlay local</button>
-      <button class="btn-secondary" id="btnTestBroadcast">Test broadcast</button>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Mon identite (pour la bibliotheque)</h2>
-    <div class="field">
-      <label>Discord User ID</label>
-      <input type="text" id="identityId" inputmode="numeric" placeholder="123456789012345678" />
-      <div class="hint">
-        Le serveur recupere ton pseudo et avatar Discord automatiquement.<br />
-        Discord -> Parametres -> Avances -> "Mode developpeur", puis clic droit sur ton avatar -> "Copier l'identifiant utilisateur".
-      </div>
-    </div>
-  </div>
-
-  <div class="section" style="background: transparent; border: none; padding: 0; margin-top: 4px;">
-    <button class="btn-danger" id="btnQuit" style="width: 100%; padding: 10px 14px; font-size: 13px;">Quitter MemeDrop</button>
   </div>
 </div>
 
-<style>
-  .library-fab {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: linear-gradient(135deg, #5865F2, #eb459e);
-    color: #fff;
-    border: none;
-    border-radius: 999px;
-    padding: 12px 18px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 6px 18px rgba(88,101,242,0.5);
-    z-index: 50;
-  }
-  .library-fab:hover { transform: translateY(-2px); }
-</style>
-<button class="library-fab" id="btnLibrary">📚 Bibliotheque</button>
-<script>
-  document.getElementById('btnLibrary').addEventListener('click', () => window.memedrop.openLibrary());
-</script>
-
 <script>
   const $ = (id) => document.getElementById(id);
-  function badge(text, cls) { return `<span class="badge ${cls}">${text}</span>`; }
-
-  async function load() {
-    const s = await window.memedrop.getAdminState();
-    $('serverUrl').value = s.serverUrl || '';
-    $('serverAdminPassword').value = s.serverAdminPassword || '';
-    $('overlayPosition').value = s.overlayPosition || 'bottom-right';
-    $('overlayDisplay').innerHTML = (s.displays || []).map((d) =>
-      `<option value="${d.id}">Ecran ${d.index}${d.label ? ' - ' + escapeHtml(d.label) : ''} (${d.width}×${d.height})${d.primary ? ' - principal' : ''}</option>`
-    ).join('');
-    $('overlayDisplay').value = String(s.overlayDisplayId);
-    $('overlayDurationMs').value = s.overlayDurationMs || 8000;
-    $('autoLaunch').checked = !!s.autoLaunch;
-    renderWsState(s.wsState);
-    refreshServerStatus();
+  function badge(text, cls) { return `<span class="badge ${cls}">${escapeHtml(text)}</span>`; }
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  function renderWsState(state) {
-    const map = {
-      connected: { t: 'Connecte', c: 'b-ok' },
-      connecting: { t: 'Connexion...', c: 'b-warn' },
-      disconnected: { t: 'Deconnecte', c: 'b-err' },
-      error: { t: 'Erreur', c: 'b-err' },
-      no_url: { t: 'Pas d\'URL', c: 'b-err' },
-      idle: { t: 'Idle', c: 'b-idle' }
-    };
-    const m = map[state] || map.idle;
-    $('wsState').innerHTML = badge(m.t, m.c);
+  const ERRORS = {
+    bad_url: 'URL invalide (doit commencer par ws:// ou wss://)',
+    missing_password: 'Mot de passe manquant',
+    bad_password: 'Mot de passe incorrect',
+    unreachable: 'Serveur injoignable'
+  };
+
+  let state = { serverUrl: '', adminEnabled: false, userCodes: [] };
+  let inviteUrl = null;
+  let lastGuildsJson = '';
+
+  async function loadState() {
+    state = await window.memedrop.getAdminState();
+    $('loginView').classList.toggle('hidden', state.adminEnabled);
+    $('mainView').classList.toggle('hidden', !state.adminEnabled);
+    $('sub').textContent = state.adminEnabled
+      ? 'Serveur : ' + state.serverUrl
+      : 'Connecte-toi a ton serveur MemeDrop pour gerer le bot et les salons.';
+    if (!state.adminEnabled) {
+      $('loginUrl').value = state.serverUrl || '';
+      $('loginPwd').focus();
+    }
   }
 
-  function renderRooms(rooms) {
-    const body = $('roomsBody');
-    const empty = $('roomsEmpty');
-    body.innerHTML = '';
-    if (!rooms || rooms.length === 0) {
-      empty.style.display = 'block';
+  async function login() {
+    $('loginErr').textContent = '';
+    $('btnLogin').disabled = true;
+    const r = await window.memedrop.adminLogin({ serverUrl: $('loginUrl').value, password: $('loginPwd').value });
+    $('btnLogin').disabled = false;
+    if (!r.ok) { $('loginErr').textContent = ERRORS[r.error] || 'Echec'; return; }
+    $('loginPwd').value = '';
+    await loadState();
+    refresh(true);
+  }
+
+  async function refresh(force) {
+    if (!state.adminEnabled) return;
+    const [st, gl] = await Promise.all([window.memedrop.serverStatus(), window.memedrop.adminGuilds()]);
+    if (st.status === 401 || gl.status === 401) {
+      // Mdp change cote serveur : retour a l'ecran de connexion
+      await window.memedrop.adminLogout();
+      await loadState();
+      $('loginErr').textContent = 'Mot de passe refuse par le serveur, reconnecte-toi.';
       return;
     }
-    empty.style.display = 'none';
-    for (const r of rooms) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
+    renderStatus(st);
+    if (!gl.ok) return;
+    // Pas de re-rendu pendant qu'on remplit un formulaire, ni si rien n'a change
+    const json = JSON.stringify(gl.body) + '|' + state.userCodes.join(',');
+    const editing = document.activeElement && document.activeElement.closest && document.activeElement.closest('.add-room');
+    if (!force && (json === lastGuildsJson || editing)) return;
+    lastGuildsJson = json;
+    renderGuilds(gl.body.guilds || []);
+    renderOrphans(gl.body.orphans || []);
+  }
+
+  function renderStatus(res) {
+    if (!res.ok) {
+      $('botState').innerHTML = badge('Serveur injoignable', 'b-err');
+      $('nbClients').textContent = '-';
+      $('nbRooms').textContent = '-';
+      return;
+    }
+    const b = res.body || {};
+    const s = b.status || 'inconnu';
+    let cls = 'b-warn';
+    if (s === 'connected') cls = 'b-ok';
+    if (s.startsWith('error') || s.startsWith('login_failed')) cls = 'b-err';
+    if (s === 'stopped' || s === 'unconfigured') cls = 'b-idle';
+    $('botState').innerHTML = badge(s + (b.tag ? ' (' + b.tag + ')' : ''), cls);
+    $('nbClients').textContent = b.clients ?? '-';
+    $('nbRooms').textContent = (b.rooms || []).length;
+    inviteUrl = b.inviteUrl || null;
+    $('btnInvite').disabled = !inviteUrl;
+  }
+
+  function roomRow(r, withChannel) {
+    const joined = state.userCodes.includes(r.code);
+    return `
+      <tr>
         <td class="code-cell">${escapeHtml(r.code)}</td>
         <td>${escapeHtml(r.name || '-')}</td>
-        <td class="channel-cell">${escapeHtml(r.channelId)}</td>
-        <td>${r.connectedClients ?? 0}</td>
-        <td><button class="btn-danger" data-code="${escapeHtml(r.code)}">Supprimer</button></td>
-      `;
-      body.appendChild(tr);
-    }
-    body.querySelectorAll('button[data-code]').forEach((b) => {
-      b.addEventListener('click', () => deleteRoom(b.dataset.code));
-    });
+        ${withChannel ? `<td class="channel-cell">#${escapeHtml(r.channelName || r.channelId)}</td>` : `<td class="channel-cell">${escapeHtml(r.channelId)}</td>`}
+        <td title="Apps connectees">${r.connectedClients ?? 0}</td>
+        <td class="acts">
+          <button class="btn-secondary btn-sm" data-act="copy" data-code="${escapeHtml(r.code)}">Copier</button>
+          ${joined
+            ? '<button class="btn-ok btn-sm" disabled>Rejoint</button>'
+            : `<button class="btn-secondary btn-sm" data-act="join" data-code="${escapeHtml(r.code)}" title="Recevoir les memes de ce salon dans cette app">Rejoindre</button>`}
+          <button class="btn-secondary btn-sm" data-act="test" data-code="${escapeHtml(r.code)}">Test</button>
+          <button class="btn-danger btn-sm" data-act="delete" data-code="${escapeHtml(r.code)}">Supprimer</button>
+        </td>
+      </tr>`;
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
-
-  async function refreshServerStatus() {
-    const res = await window.memedrop.serverStatus();
-    if (!res.ok) {
-      $('srvReachable').innerHTML = badge('Injoignable / mdp KO', 'b-err');
-      $('botState').innerHTML = badge('-', 'b-idle');
-      $('nbClients').textContent = '-';
-      renderRooms([]);
+  function renderGuilds(guilds) {
+    $('guildsTitle').textContent = `Serveurs Discord (${guilds.length})`;
+    const list = $('guildsList');
+    if (guilds.length === 0) {
+      list.innerHTML = '<div class="muted">Le bot n\'est sur aucun serveur Discord. Invite-le avec le bouton ci-dessus.</div>';
       return;
     }
-    $('srvReachable').innerHTML = badge('Joignable', 'b-ok');
-    const b = res.body || {};
-    let bState = b.status || 'inconnu';
-    let cls = 'b-warn';
-    if (bState === 'connected') cls = 'b-ok';
-    if (bState.startsWith && (bState.startsWith('error') || bState.startsWith('login_failed'))) cls = 'b-err';
-    if (bState === 'stopped' || bState === 'unconfigured') cls = 'b-idle';
-    $('botState').innerHTML = badge(bState + (b.tag ? ' (' + b.tag + ')' : ''), cls);
-    $('nbClients').textContent = b.clients ?? '-';
-    renderRooms(b.rooms || []);
+    list.innerHTML = guilds.map((g) => {
+      const icon = g.iconUrl
+        ? `<img class="guild-icon" src="${escapeHtml(g.iconUrl)}" alt="" />`
+        : `<div class="guild-icon">${escapeHtml((g.name || '?').slice(0, 1).toUpperCase())}</div>`;
+      const options = g.channels.map((c) => `<option value="${c.id}" ${c.canRead ? '' : 'disabled'}>#${escapeHtml(c.name)}${c.canRead ? (c.canWebhook ? '' : ' (sans perm. webhook)') : ' (bot sans acces)'}</option>`).join('');
+      return `
+        <div class="guild" data-guild="${g.id}">
+          <div class="guild-head">
+            ${icon}
+            <div class="grow">
+              <div class="guild-name">${escapeHtml(g.name)}</div>
+              <div class="guild-meta">${g.memberCount} membres · ${g.rooms.length} salon(s) MemeDrop</div>
+            </div>
+            <button class="btn-danger btn-sm" data-act="leave" data-guild="${g.id}" data-name="${escapeHtml(g.name)}">Retirer le bot</button>
+          </div>
+          <div class="guild-body">
+            ${g.rooms.length
+              ? `<table class="rooms-table">
+                  <thead><tr><th>Code</th><th>Nom</th><th>Channel</th><th>Apps</th><th></th></tr></thead>
+                  <tbody>${g.rooms.map((r) => roomRow(r, true)).join('')}</tbody>
+                </table>`
+              : '<div class="muted">Aucun salon MemeDrop sur ce serveur.</div>'}
+            <div class="add-room">
+              <div class="row">
+                <div class="field">
+                  <label>Channel</label>
+                  <select data-role="channel">${options}</select>
+                </div>
+                <div class="field">
+                  <label>Nom (optionnel)</label>
+                  <input type="text" data-role="name" placeholder="${escapeHtml(g.name)}" />
+                </div>
+                <div class="field code">
+                  <label>Code</label>
+                  <input type="text" data-role="code" placeholder="auto" />
+                </div>
+                <button class="btn-primary" data-act="create" data-guild="${g.id}">Creer le salon</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
   }
 
-  async function deleteRoom(code) {
-    if (!confirm(`Supprimer le salon "${code}" ?`)) return;
-    const res = await window.memedrop.deleteRoom(code);
-    if (res.ok) refreshServerStatus();
-    else alert('Echec: ' + (res.body?.error || res.status));
+  function renderOrphans(orphans) {
+    $('orphansSection').classList.toggle('hidden', orphans.length === 0);
+    $('orphansBody').innerHTML = orphans.map((r) => roomRow(r, false)).join('');
   }
 
-  $('btnBack').addEventListener('click', () => window.memedrop.backToWelcome());
-  $('btnQuit').addEventListener('click', () => window.memedrop.quitApp());
-
-  function renderUpdate(u) {
-    if (!u || !u.available) {
-      $('updateBanner').classList.remove('visible');
+  async function onAction(e) {
+    const b = e.target.closest('button[data-act]');
+    if (!b) return;
+    const act = b.dataset.act;
+    const code = b.dataset.code;
+    if (act === 'copy') {
+      await navigator.clipboard.writeText(code);
+      const old = b.textContent;
+      b.textContent = 'Copie !';
+      setTimeout(() => { b.textContent = old; }, 1200);
       return;
     }
-    $('updateBanner').classList.add('visible');
-    const btn = $('btnUpdate');
-    if (u.state === 'downloading') {
-      $('updateLabel').textContent = 'Telechargement de ' + (u.name || ('v' + u.version)) + '...';
-      btn.disabled = true;
-      btn.textContent = 'Telechargement...';
-    } else if (u.state === 'ready') {
-      $('updateLabel').textContent = 'Installeur lance, l\'app va se fermer.';
-      btn.disabled = true;
-      btn.textContent = 'En cours...';
-    } else if (u.state === 'error') {
-      $('updateLabel').textContent = 'Erreur de telechargement. Reessaye.';
-      btn.disabled = false;
-      btn.textContent = 'Reessayer';
-    } else {
-      $('updateLabel').textContent = (u.name || ('v' + u.version)) + ' - clique pour installer';
-      btn.disabled = false;
-      btn.textContent = 'Telecharger';
+    if (act === 'join') {
+      await window.memedrop.addUserCode(code);
+      state = await window.memedrop.getAdminState();
+      return refresh(true);
+    }
+    if (act === 'test') {
+      await window.memedrop.broadcastTest(code);
+      return;
+    }
+    if (act === 'delete') {
+      if (!confirm(`Supprimer le salon "${code}" ? Les apps qui l'utilisent ne recevront plus rien.`)) return;
+      const res = await window.memedrop.deleteRoom(code);
+      if (!res.ok) alert('Echec : ' + (res.body?.error || res.status));
+      return refresh(true);
+    }
+    if (act === 'leave') {
+      if (!confirm(`Retirer le bot du serveur "${b.dataset.name}" ?\nSes salons MemeDrop seront supprimes. Il faudra le reinviter pour revenir.`)) return;
+      b.disabled = true;
+      const res = await window.memedrop.leaveGuild(b.dataset.guild);
+      if (!res.ok) { b.disabled = false; alert('Echec : ' + (res.body?.message || res.body?.error || res.status)); }
+      return refresh(true);
+    }
+    if (act === 'create') {
+      const form = b.closest('.add-room');
+      const channelId = form.querySelector('[data-role=channel]').value;
+      const name = form.querySelector('[data-role=name]').value.trim();
+      const wantedCode = form.querySelector('[data-role=code]').value.trim();
+      if (!channelId) { alert('Choisis un channel'); return; }
+      b.disabled = true;
+      const res = await window.memedrop.addRoom({ code: wantedCode, channelId, name });
+      b.disabled = false;
+      if (!res.ok) {
+        alert(res.body?.error === 'invalid_code'
+          ? 'Code invalide : 2 a 40 caracteres (lettres, chiffres, - et _)'
+          : 'Echec : ' + (res.body?.error || res.status));
+        return;
+      }
+      document.activeElement && document.activeElement.blur();
+      return refresh(true);
     }
   }
-  $('btnUpdate').addEventListener('click', async () => { await window.memedrop.downloadUpdate(); });
-  window.memedrop.onUpdateStatus((u) => renderUpdate(u));
-  (async () => { renderUpdate(await window.memedrop.getUpdate()); })();
 
-  // Identite (pour la bibliotheque)
-  (async () => {
-    const id = await window.memedrop.getIdentity();
-    $('identityId').value = id.discordUserId || '';
-  })();
-  let identityTimer = null;
-  function scheduleIdentitySave() {
-    if (identityTimer) clearTimeout(identityTimer);
-    identityTimer = setTimeout(() => {
-      window.memedrop.setIdentity({ discordUserId: $('identityId').value.trim() });
-    }, 500);
-  }
-  $('identityId').addEventListener('input', scheduleIdentitySave);
-
-  $('btnSaveLocal').addEventListener('click', async () => {
-    await window.memedrop.saveLocal({
-      serverUrl: $('serverUrl').value.trim(),
-      serverAdminPassword: $('serverAdminPassword').value,
-      overlayPosition: $('overlayPosition').value,
-      overlayDisplayId: $('overlayDisplay').value ? Number($('overlayDisplay').value) : null,
-      overlayDurationMs: Number($('overlayDurationMs').value),
-      autoLaunch: $('autoLaunch').checked
-    });
-    setTimeout(refreshServerStatus, 800);
+  $('guildsList').addEventListener('click', onAction);
+  $('orphansBody').addEventListener('click', onAction);
+  $('btnLogin').addEventListener('click', login);
+  $('loginPwd').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+  $('btnRefresh').addEventListener('click', () => refresh(true));
+  $('btnInvite').addEventListener('click', () => { if (inviteUrl) window.memedrop.openLink(inviteUrl); });
+  $('btnLogout').addEventListener('click', async () => {
+    if (!confirm('Se deconnecter du panneau Gestion ? Tes salons et reglages ne changent pas.')) return;
+    await window.memedrop.adminLogout();
+    await loadState();
   });
-
   $('btnPushToken').addEventListener('click', async () => {
     const token = $('botToken').value.trim();
     if (!token) { alert('Token vide'); return; }
     $('btnPushToken').disabled = true;
     const res = await window.memedrop.pushToken(token);
     $('btnPushToken').disabled = false;
-    if (res.ok) { $('botToken').value = ''; alert('Token envoye !'); }
-    else alert('Echec: ' + (res.body?.error || res.status));
-    refreshServerStatus();
-  });
-
-  $('btnAddRoom').addEventListener('click', async () => {
-    const code = $('newRoomCode').value.trim();
-    const channelId = $('newRoomChannel').value.trim();
-    const name = $('newRoomName').value.trim();
-    if (!code || !channelId) { alert('Code et Channel ID requis'); return; }
-    $('btnAddRoom').disabled = true;
-    const res = await window.memedrop.addRoom({ code, channelId, name });
-    $('btnAddRoom').disabled = false;
-    if (res.ok) {
-      $('newRoomCode').value = '';
-      $('newRoomChannel').value = '';
-      $('newRoomName').value = '';
-      refreshServerStatus();
-    } else {
-      alert('Echec: ' + (res.body?.error || res.status));
-    }
-  });
-
-  $('btnRefresh').addEventListener('click', refreshServerStatus);
-  $('btnTestLocal').addEventListener('click', () => window.memedrop.testOverlayLocal());
-  $('btnTestBroadcast').addEventListener('click', async () => {
-    const code = $('testRoomCode').value.trim();
-    await window.memedrop.broadcastTest(code || null);
+    if (res.ok) { $('botToken').value = ''; alert('Token envoye ! Le bot redemarre.'); }
+    else alert('Echec : ' + (res.body?.error || res.status));
+    refresh(true);
   });
   $('lnkDevPortal').addEventListener('click', () => window.memedrop.openLink('https://discord.com/developers/applications'));
 
-  window.memedrop.onWsStatus((s) => renderWsState(s.state));
-
-  setInterval(refreshServerStatus, 5000);
-  load();
+  // Rafraichit aussi a chaque retour sur la fenetre (ex: apres avoir invite le bot)
+  window.addEventListener('focus', () => refresh(false));
+  setInterval(() => refresh(false), 10000);
+  loadState().then(() => refresh(true));
 </script>
 </body>
 </html>

@@ -31,14 +31,20 @@ Le serveur reste connecte 24/7 a Discord. Quand tu postes dans le channel, il po
 
 - `GET  /health` -> `{ ok: true }`
 - `WS   /feed` -> broadcast des memes aux clients
-- `GET  /admin/status` (header `X-Admin-Password`) -> statut bot + nb clients
-- `POST /admin/config` (header `X-Admin-Password`, body `{ botToken, channelId }`) -> set config + restart bot
-- `POST /admin/test` (header `X-Admin-Password`) -> broadcast un test "Test depuis le panneau admin !"
+Tous les `/admin/*` demandent le header `X-Admin-Password`.
+
+- `GET    /admin/status` -> statut du bot, lien d'invitation, nb d'apps connectees, salons
+- `GET    /admin/guilds` -> serveurs Discord ou est le bot, avec leurs channels et salons MemeDrop
+- `DELETE /admin/guilds/:id` -> retire le bot d'un serveur Discord (et supprime ses salons)
+- `POST   /admin/token` (body `{ botToken }`) -> enregistre le token et redemarre le bot
+- `POST   /admin/rooms` (body `{ channelId, name?, code? }`) -> cree / met a jour un salon (code genere si vide)
+- `DELETE /admin/rooms/:code` -> supprime un salon
+- `POST   /admin/test` (body `{ code? }`) -> envoie un meme de test
 
 ## Variables d'environnement
 
 - `PORT` : port HTTP/WS (defaut 8787)
-- `ADMIN_PASSWORD` : mot de passe admin (defaut "123456" - **a changer en prod**)
+- `ADMIN_PASSWORD` : mot de passe admin, **obligatoire** (sans lui l'API admin est desactivee). Choisis-en un long et unique.
 - `CONFIG_PATH` : chemin du fichier config persistant (defaut `./config.json`)
 
 ## Deploiement sur Oracle Cloud Free Tier
@@ -138,13 +144,12 @@ Doit renvoyer `{"ok":true}`.
 
 ### 6. Configurer le bot Discord
 
-Dans l'app MemeDrop (mode Admin) :
+Dans l'app MemeDrop : **J'heberge un serveur** (ou bouton ⚙ Gestion) :
 - URL serveur : `ws://<IP_PUBLIQUE>:8787`
-- Mot de passe admin : celui defini dans `ADMIN_PASSWORD` du service systemd
-- Token bot + ID channel : depuis le Discord Developer Portal
-- Clic "Envoyer au serveur"
+- Mot de passe : celui defini dans `ADMIN_PASSWORD` du service systemd
+- "Changer le token du bot" : colle le token du Discord Developer Portal
 
-Le statut doit passer a `connected (TonBot#1234)`.
+Le statut doit passer a `connected (TonBot#1234)`. Ensuite "Inviter le bot sur un serveur Discord", puis cree un salon en choisissant un channel.
 
 ### 7. Hardening (optionnel, recommande)
 
@@ -158,7 +163,7 @@ Le statut doit passer a `connected (TonBot#1234)`.
 ```bash
 cd server
 npm install
-node server.js
+ADMIN_PASSWORD=test node server.js
 ```
 
 Puis dans l'app cliente, URL serveur = `ws://localhost:8787`.

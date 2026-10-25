@@ -13,9 +13,8 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // URL du serveur MemeDrop (mets celle de ton VPS avant de build le .exe pour tes potes)
 const DEFAULT_SERVER_URL = 'ws://57.131.40.94:8787';
 
-// Mot de passe en dur qui protege l'acces au panneau admin de l'app cliente.
-// Change-le avant de distribuer le .exe a tes amis.
-const APP_ADMIN_PASSWORD = 'TonMdpAdmin';
+// Le panneau "Gestion" n'a pas de mot de passe en dur : il se debloque avec
+// le ADMIN_PASSWORD du serveur, verifie par le serveur lui-meme.
 
 // Manifest de la derniere version, publie sur le VPS par la GitHub Action release.yml.
 const UPDATE_MANIFEST_URL = 'https://memedrop.57-131-40-94.sslip.io/latest.json';
@@ -24,9 +23,10 @@ const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 min
 
 const store = new Store({
   defaults: {
-    mode: null, // null | 'admin' | 'user'
+    mode: null, // null = pas encore configure | 'user' ('admin' = legacy, migre)
     serverUrl: DEFAULT_SERVER_URL,
     serverAdminPassword: '',
+    adminEnabled: false, // panneau Gestion debloque (mdp serveur valide)
     userCode: '',
     userCodes: [],     // multi-salon : liste des codes (priorite sur userCode legacy)
     overlayDurationMs: 8000,
@@ -52,6 +52,19 @@ const store = new Store({
   if (legacy && typeof legacy === 'string') {
     store.set('userCodes', [legacy.trim()]);
   }
+})();
+
+// Migration : l'ancien "mode admin" devient le mode normal + panneau Gestion.
+// On garde les salons, reglages et le mdp serveur.
+// Idem si l'ancien "Changer de mode" avait remis l'app sur l'accueil alors
+// que des salons sont encore enregistres. Si le mdp n'est plus valide, le
+// panneau Gestion se deconnecte tout seul au premier refus du serveur.
+(function migrateAdminMode() {
+  const mode = store.get('mode');
+  const hasCodes = (store.get('userCodes') || []).filter(Boolean).length > 0;
+  if (mode !== 'admin' && !(mode == null && hasCodes)) return;
+  store.set('mode', 'user');
+  store.set('adminEnabled', !!store.get('serverAdminPassword'));
 })();
 
 // Statut du bot Discord (partage entre toutes les rooms)
@@ -164,9 +177,6 @@ let trayPopupWindow = null;
 let wsByCode = {};            // code -> WebSocket
 let wsStateByCode = {};       // code -> 'connecting' | 'connected' | 'disconnected' | 'error'
 let wsReconnectByCode = {};   // code -> setTimeout id
-let wsAdmin = null;           // une seule WS pour le mode admin
-let wsAdminState = 'idle';
-let wsAdminReconnectTimer = null;
 
 // --- helpers ---
 
@@ -376,7 +386,7 @@ function showMeme({ mediaUrl, mediaKind, audioUrl, text, author, source, customD
   }
 }
 
-// --- WebSocket client (multi-connexion mode user, simple mode admin) ---
+// --- WebSocket client (une connexion par salon) ---
 
 function feedBaseUrl() {
   const base = store.get('serverUrl');
@@ -389,7 +399,6 @@ function handleWsMessage(msg) {
     serverBotStatus = msg.status || serverBotStatus;
     if (msg.room) roomNameByCode[msg.room] = msg.roomName || null;
     notifyUserState();
-    notifyAdminStatus();
   }
   if (msg.type === 'update-available') {
     // Le serveur a detecte une nouvelle release (latest.json) -> on re-check immediat
@@ -471,64 +480,15 @@ function scheduleUserReconnect(code) {
   }, 5000);
 }
 
-function connectAdminWs() {
-  closeAdminWs();
-  const base = feedBaseUrl();
-  const pwd = store.get('serverAdminPassword');
-  if (!base || !pwd) { wsAdminState = 'no_url'; notifyAdminStatus(); return; }
-  wsAdminState = 'connecting';
-  notifyAdminStatus();
-
-  try {
-    wsAdmin = new WebSocket(base + '?admin=' + encodeURIComponent(pwd));
-  } catch (_) {
-    wsAdminState = 'error';
-    notifyAdminStatus();
-    scheduleAdminReconnect();
-    return;
-  }
-  wsAdmin.on('open', () => { wsAdminState = 'connected'; notifyAdminStatus(); });
-  wsAdmin.on('message', (data) => {
-    try { handleWsMessage(JSON.parse(data.toString())); } catch (_) {}
-  });
-  wsAdmin.on('close', () => {
-    wsAdminState = 'disconnected';
-    notifyAdminStatus();
-    scheduleAdminReconnect();
-  });
-  wsAdmin.on('error', () => { wsAdminState = 'error'; notifyAdminStatus(); });
-}
-
-function closeAdminWs() {
-  if (wsAdminReconnectTimer) { clearTimeout(wsAdminReconnectTimer); wsAdminReconnectTimer = null; }
-  if (wsAdmin) {
-    try { wsAdmin.removeAllListeners(); wsAdmin.close(); } catch (_) {}
-    wsAdmin = null;
-  }
-}
-
-function scheduleAdminReconnect() {
-  if (wsAdminReconnectTimer) return;
-  wsAdminReconnectTimer = setTimeout(() => {
-    wsAdminReconnectTimer = null;
-    if (store.get('mode') === 'admin') connectAdminWs();
-  }, 5000);
-}
-
-// Point d'entree : connecte tout selon le mode
+// Point d'entree : connecte un WS par salon
 function connectAllWs() {
   closeAllWs();
-  const mode = store.get('mode');
-  if (mode === 'admin') {
-    connectAdminWs();
-  } else if (mode === 'user') {
-    const codes = (store.get('userCodes') || []).filter(Boolean);
-    for (const code of codes) connectUserWs(code);
-  }
+  if (!store.get('mode')) return;
+  const codes = (store.get('userCodes') || []).filter(Boolean);
+  for (const code of codes) connectUserWs(code);
 }
 
 function closeAllWs() {
-  closeAdminWs();
   for (const code of Object.keys(wsByCode)) closeUserWs(code);
   for (const code of Object.keys(wsReconnectByCode)) {
     clearTimeout(wsReconnectByCode[code]);
@@ -553,12 +513,6 @@ function aggregateUserWsState() {
   return 'connecting';
 }
 
-function notifyAdminStatus() {
-  if (adminWindow && !adminWindow.isDestroyed()) {
-    adminWindow.webContents.send('ws:status', { state: wsAdminState });
-  }
-}
-
 function buildRoomsState() {
   const codes = (store.get('userCodes') || []).filter(Boolean);
   return codes.map((code) => ({
@@ -581,20 +535,22 @@ function notifyUserState() {
       overlayPosition: store.get('overlayPosition'),
       overlayDisplayId: getOverlayDisplay().id,
       displays: listDisplays(),
-      overlayOpacity: store.get('overlayOpacity')
+      overlayOpacity: store.get('overlayOpacity'),
+      adminEnabled: !!store.get('adminEnabled')
     });
   }
 }
 
 // --- HTTP helpers ---
 
-async function adminFetch(pathname, options = {}) {
-  const httpBase = httpUrlFromWs(store.get('serverUrl'));
+// serverUrl / password : permet de tester des identifiants avant de les enregistrer
+async function adminFetch(pathname, options = {}, serverUrl = store.get('serverUrl'), password = store.get('serverAdminPassword')) {
+  const httpBase = httpUrlFromWs(serverUrl);
   if (!httpBase) return { ok: false, status: 0, body: { error: 'no_server_url' } };
   const url = httpBase + pathname;
   const headers = {
     'Content-Type': 'application/json',
-    'X-Admin-Password': store.get('serverAdminPassword') || ''
+    'X-Admin-Password': password || ''
   };
   try {
     const res = await fetch(url, { ...options, headers });
@@ -607,14 +563,14 @@ async function adminFetch(pathname, options = {}) {
   }
 }
 
-// Fetch authentifie par codes user OU mdp admin selon le mode courant.
+// Fetch authentifie par mdp admin si le panneau Gestion est debloque
+// (acces a tous les salons), sinon par les codes de salon de l'user.
 async function userOrAdminFetch(pathname, options = {}) {
   const httpBase = httpUrlFromWs(store.get('serverUrl'));
   if (!httpBase) return { ok: false, status: 0, body: { error: 'no_server_url' } };
   const url = httpBase + pathname;
-  const mode = store.get('mode');
   const headers = { 'Content-Type': 'application/json' };
-  if (mode === 'admin') {
+  if (store.get('adminEnabled')) {
     headers['X-Admin-Password'] = store.get('serverAdminPassword') || '';
   } else {
     const codes = (store.get('userCodes') || []).filter(Boolean);
@@ -717,10 +673,12 @@ function createAdminWindow() {
     return;
   }
   adminWindow = new BrowserWindow({
-    width: 620,
+    width: 760,
     height: 820,
+    minWidth: 560,
+    minHeight: 500,
     resizable: true,
-    title: 'MemeDrop - Admin',
+    title: 'MemeDrop - Gestion',
     icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -804,7 +762,7 @@ function toggleTrayPopup() {
 function buildTrayMenu() {
   const mode = store.get('mode');
   const items = [
-    { label: `MemeDrop (${mode || 'non configure'})`, enabled: false },
+    { label: mode ? 'MemeDrop' : 'MemeDrop (non configure)', enabled: false },
     { type: 'separator' },
     {
       label: 'Ouvrir l\'app',
@@ -825,7 +783,7 @@ function buildTrayMenu() {
     }
   ];
 
-  if (mode === 'user') {
+  if (mode) {
     const codes = (store.get('userCodes') || []).filter(Boolean);
     items.push({
       label: codes.length === 0
@@ -850,8 +808,8 @@ function buildTrayMenu() {
       }
     },
     {
-      label: 'Changer de mode',
-      click: () => goBackToWelcome()
+      label: 'Gestion du serveur',
+      click: () => createAdminWindow()
     },
     { type: 'separator' },
     {
@@ -870,9 +828,7 @@ function buildTrayMenu() {
 }
 
 function openApp() {
-  const mode = store.get('mode');
-  if (mode === 'admin') createAdminWindow();
-  else if (mode === 'user') createUserWindow();
+  if (store.get('mode')) createUserWindow();
   else createWelcomeWindow();
   if (trayPopupWindow && trayPopupWindow.isVisible()) trayPopupWindow.hide();
 }
@@ -886,18 +842,6 @@ function notifyPopupState() {
     });
   }
   if (tray) tray.setContextMenu(buildTrayMenu());
-}
-
-function goBackToWelcome() {
-  store.set('mode', null);
-  closeAllWs();
-  serverBotStatus = null;
-  roomNameByCode = {};
-  if (adminWindow && !adminWindow.isDestroyed()) { adminWindow.destroy(); adminWindow = null; }
-  if (userWindow && !userWindow.isDestroyed()) { userWindow.destroy(); userWindow = null; }
-  if (libraryWindow && !libraryWindow.isDestroyed()) { libraryWindow.destroy(); libraryWindow = null; }
-  if (tray) tray.setContextMenu(buildTrayMenu());
-  createWelcomeWindow();
 }
 
 function createTray() {
@@ -923,15 +867,40 @@ ipcMain.handle('welcome:choose-user', (_e, code) => {
   return true;
 });
 
-ipcMain.handle('welcome:choose-admin', (_e, pwd) => {
-  if (pwd !== APP_ADMIN_PASSWORD) return false;
-  store.set('mode', 'admin');
+// Verifie l'URL + le mdp admin aupres du serveur, puis les enregistre et
+// debloque le panneau Gestion. Renvoie { ok, error? }.
+async function adminLogin(serverUrl, password) {
+  const url = String(serverUrl || '').trim().replace(/\/+$/, '');
+  if (!/^wss?:\/\/.+/i.test(url)) return { ok: false, error: 'bad_url' };
+  if (!password) return { ok: false, error: 'missing_password' };
+  const res = await adminFetch('/admin/status', { method: 'GET' }, url, password);
+  if (res.status === 401) return { ok: false, error: 'bad_password' };
+  if (!res.ok) return { ok: false, error: 'unreachable' };
+  const serverChanged = url !== store.get('serverUrl');
+  store.set('serverUrl', url);
+  store.set('serverAdminPassword', password);
+  store.set('adminEnabled', true);
+  // Nouveau serveur : les codes de salon de l'ancien n'y existent pas forcement
+  if (serverChanged) connectAllWs();
+  notifyUserState();
+  if (tray) tray.setContextMenu(buildTrayMenu());
+  return { ok: true };
+}
+
+// Heberger son propre serveur : debloque la Gestion directement depuis l'accueil
+ipcMain.handle('welcome:setup-admin', async (_e, data) => {
+  const r = await adminLogin(data?.serverUrl, data?.password);
+  if (!r.ok) return r;
+  store.set('mode', 'user');
   if (welcomeWindow && !welcomeWindow.isDestroyed()) { welcomeWindow.destroy(); welcomeWindow = null; }
   if (tray) tray.setContextMenu(buildTrayMenu());
+  createUserWindow();
   createAdminWindow();
   connectAllWs();
-  return true;
+  return { ok: true };
 });
+
+ipcMain.handle('welcome:get-defaults', () => ({ serverUrl: store.get('serverUrl') }));
 
 ipcMain.handle('user:get-state', () => ({
   rooms: buildRoomsState(),
@@ -944,7 +913,8 @@ ipcMain.handle('user:get-state', () => ({
   overlayPosition: store.get('overlayPosition'),
   overlayDisplayId: getOverlayDisplay().id,
   displays: listDisplays(),
-  overlayOpacity: store.get('overlayOpacity')
+  overlayOpacity: store.get('overlayOpacity'),
+  adminEnabled: !!store.get('adminEnabled')
 }));
 
 ipcMain.handle('user:add-code', (_e, code) => {
@@ -1097,9 +1067,8 @@ ipcMain.handle('favorites:toggle', (_e, id) => {
 
 ipcMain.handle('library:rooms', () => {
   // Renvoie les rooms ou l'user peut envoyer (codes connus dans son userCodes,
-  // ou tous les rooms si admin avec roomName quand dispo).
-  const mode = store.get('mode');
-  if (mode === 'admin') {
+  // ou tous les rooms si la Gestion est debloquee, avec roomName quand dispo).
+  if (store.get('adminEnabled')) {
     // On va chercher la liste cote serveur via adminFetch
     return adminFetch('/admin/status').then((r) => {
       if (!r.ok) return [];
@@ -1111,31 +1080,30 @@ ipcMain.handle('library:rooms', () => {
   return codes.map((c) => ({ code: c, name: roomNameByCode[c] || '' }));
 });
 
+ipcMain.handle('admin:open', () => {
+  createAdminWindow();
+  return true;
+});
+
 ipcMain.handle('admin:get-state', () => ({
   serverUrl: store.get('serverUrl'),
-  serverAdminPassword: store.get('serverAdminPassword'),
-  overlayPosition: store.get('overlayPosition'),
-  overlayDisplayId: getOverlayDisplay().id,
-  displays: listDisplays(),
-  overlayDurationMs: store.get('overlayDurationMs'),
-  autoLaunch: store.get('autoLaunch'),
-  wsState
+  adminEnabled: !!store.get('adminEnabled'),
+  userCodes: (store.get('userCodes') || []).filter(Boolean)
 }));
 
-ipcMain.handle('admin:save-local', (_e, data) => {
-  if (typeof data.serverUrl === 'string') store.set('serverUrl', data.serverUrl.trim());
-  if (typeof data.serverAdminPassword === 'string') store.set('serverAdminPassword', data.serverAdminPassword);
-  if (typeof data.overlayPosition === 'string') store.set('overlayPosition', data.overlayPosition);
-  if (data.overlayDisplayId != null && screen.getAllDisplays().some((d) => d.id === Number(data.overlayDisplayId))) {
-    store.set('overlayDisplayId', Number(data.overlayDisplayId));
-  }
-  positionOverlay(store.get('overlayPosition'));
-  if (data.overlayDurationMs) store.set('overlayDurationMs', Number(data.overlayDurationMs) || 8000);
-  if (typeof data.autoLaunch === 'boolean') store.set('autoLaunch', data.autoLaunch);
-  ensureAutoLaunch();
-  if (tray) tray.setContextMenu(buildTrayMenu());
-  connectAllWs();
+ipcMain.handle('admin:login', async (_e, data) => adminLogin(data?.serverUrl, data?.password));
+
+ipcMain.handle('admin:logout', () => {
+  store.set('adminEnabled', false);
+  store.set('serverAdminPassword', '');
+  notifyUserState();
   return true;
+});
+
+ipcMain.handle('admin:guilds', async () => adminFetch('/admin/guilds', { method: 'GET' }));
+
+ipcMain.handle('admin:leave-guild', async (_e, guildId) => {
+  return await adminFetch('/admin/guilds/' + encodeURIComponent(String(guildId)), { method: 'DELETE' });
 });
 
 ipcMain.handle('admin:push-token', async (_e, token) => {
@@ -1178,11 +1146,6 @@ ipcMain.handle('admin:test-overlay-local', () => {
 
 ipcMain.handle('common:open-link', (_e, url) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url);
-});
-
-ipcMain.handle('common:back-to-welcome', () => {
-  goBackToWelcome();
-  return true;
 });
 
 // Tray popup
@@ -1267,10 +1230,7 @@ if (!gotLock) {
     if (!mode) {
       createWelcomeWindow();
     } else {
-      if (!isBootHidden) {
-        if (mode === 'admin') createAdminWindow();
-        else if (mode === 'user') createUserWindow();
-      }
+      if (!isBootHidden) createUserWindow();
       // Au boot Windows (--hidden), on laisse ~5s au reseau pour se preparer
       // avant de tenter la connexion WS. Sinon on connecte tout de suite.
       const wsDelayMs = isBootHidden ? 5000 : 0;
